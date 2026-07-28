@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       manifest_name:
-        description: 'Nama file XML di folder .github/manifests/ (tanpa .xml)'
+        description: 'Nama file XML di folder .github/manifest/ (tanpa .xml)'
         required: true
         type: string
         default: 'camellia'
@@ -53,4 +53,3 @@ jobs:
       include_bbg: ${{ inputs.include_bbg }}
       use_proton_clang: ${{ inputs.use_proton_clang }}
     secrets: inherit
-    
