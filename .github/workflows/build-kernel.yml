@@ -1,4 +1,4 @@
-name: Build Kernel Worker
+name: Build Kernel & Manager Worker
 
 on:
   workflow_call:
@@ -74,29 +74,29 @@ jobs:
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git gcc64
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git gcc32
 
-      - name: Sync Source from Selected Manifest
+      - name: Sync Kernel Source from Manifest
         run: |
           mkdir -p ~/.bin
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo
           chmod a+rx ~/.bin/repo
           export PATH=~/.bin:$PATH
 
-          # Cari file XML di folder .github/manifests/ atau manifest/
           MANIFEST_FILE="${{ inputs.manifest_name }}.xml"
           MANIFEST_PATH=""
 
-          if [ -f "$GITHUB_WORKSPACE/.github/manifests/$MANIFEST_FILE" ]; then
+          if [ -f "$GITHUB_WORKSPACE/.github/manifest/$MANIFEST_FILE" ]; then
+            MANIFEST_PATH="$GITHUB_WORKSPACE/.github/manifest/$MANIFEST_FILE"
+          elif [ -f "$GITHUB_WORKSPACE/.github/manifests/$MANIFEST_FILE" ]; then
             MANIFEST_PATH="$GITHUB_WORKSPACE/.github/manifests/$MANIFEST_FILE"
           elif [ -f "$GITHUB_WORKSPACE/manifest/$MANIFEST_FILE" ]; then
             MANIFEST_PATH="$GITHUB_WORKSPACE/manifest/$MANIFEST_FILE"
           else
-            echo "Error: File $MANIFEST_FILE tidak ditemukan di folder .github/manifests/ atau manifest/!"
+            echo "Error: File manifest $MANIFEST_FILE tidak ditemukan!"
             exit 1
           fi
 
           echo "Menggunakan manifest dari: $MANIFEST_PATH"
 
-          # Injeksi ke repositori lokal sementara agar repo init berjalan lancar
           mkdir -p local-manifest
           cp "$MANIFEST_PATH" local-manifest/default.xml
           cd local-manifest
@@ -104,7 +104,7 @@ jobs:
           git config user.name "GitHub Action"
           git config user.email "action@github.com"
           git add default.xml
-          git commit -m "Init local manifest"
+          git commit -m "Local manifest init"
           git branch -M main
           cd ..
 
@@ -126,7 +126,6 @@ jobs:
             curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
           fi
 
-          # Patch Wajib Non-GKI 4.14: Mematikan Kprobes agar menggunakan VFS manual hooks
           HOOK_FILE="drivers/kernelsu/core_hook.c"
           if [ -f "$HOOK_FILE" ]; then
             echo "Patching core_hook.c untuk manual hooks Non-GKI..."
@@ -145,7 +144,7 @@ jobs:
         if: inputs.include_susfs == true
         run: |
           cd kernel-source
-          echo "Memasang SUSFS 4.14..."
+          echo "Memasang SUSFS 4.14 Patch & Configs..."
           if [ -d "../patches/susfs_4.14" ]; then
             cp -r ../patches/susfs_4.14/* .
           fi
@@ -249,15 +248,14 @@ jobs:
 
       - name: Build Manager APK via Gradle
         run: |
-          # Deteksi otomatis direktori lokasi gradlew (misal: manager-src/manager/)
-          GRADLE_DIR=$(find manager-src -maxdepth 2 -name "gradlew" -exec dirname {} \;)
+          GRADLE_DIR=$(find manager-src -maxdepth 3 -name "gradlew" -exec dirname {} \;)
 
           if [ -z "$GRADLE_DIR" ]; then
-            echo "Error: File gradlew tidak ditemukan di repositori!"
+            echo "Error: File gradlew tidak ditemukan!"
             exit 1
           fi
 
-          echo "Lokasi project Gradle terdeteksi di: $GRADLE_DIR"
+          echo "Lokasi Gradle project ditemukan di: $GRADLE_DIR"
           cd "$GRADLE_DIR"
           chmod +x gradlew
           ./gradlew :app:assembleRelease --no-daemon
@@ -268,7 +266,7 @@ jobs:
           APK_FILE=$(find manager-src -name "*.apk" | grep -i "release" | head -n 1)
 
           if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
-            echo "Menemukan APK di: $APK_FILE"
+            echo "APK ditemukan di: $APK_FILE"
             cp "$APK_FILE" "output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk"
           else
             echo "Error: File APK hasil kompilasi tidak ditemukan!"
@@ -280,3 +278,4 @@ jobs:
         with:
           name: ${{ inputs.ksu_fork }}-Manager-APK
           path: output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk
+          
