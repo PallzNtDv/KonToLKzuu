@@ -1,6 +1,19 @@
 name: Cleanup Workflow Runs
 
 on:
+  # 1. Otomatis berjalan sesuai jadwal (Cron)
+  # Contoh di bawah: Berjalan otomatis setiap hari Minggu pukul 00:00 UTC
+  schedule:
+    - cron: '0 0 * * 0'
+
+  # 2. (Opsional) Otomatis berjalan setiap kali workflow build kernel selesai
+  # Hapus bagian workflow_run ini jika kamu HANYA ingin jadwal berkala (cron)
+  workflow_run:
+    workflows: ["Build Kernel & Manager Worker"]
+    types:
+      - completed
+
+  # 3. Tetap bisa dijalankan secara manual via UI Actions
   workflow_dispatch:
     inputs:
       del_type:
@@ -28,7 +41,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Ambil pilihan dari input manual, jika kosong (berjalan otomatis) gunakan 'failed_only'
           DEL_TYPE="${{ inputs.del_type }}"
+          if [ -z "$DEL_TYPE" ]; then
+            DEL_TYPE="failed_only"
+            echo "Workflow dipicu secara otomatis. Menggunakan mode default: $DEL_TYPE"
+          fi
+
           REPO="${{ github.repository }}"
           CURRENT_RUN_ID="${{ github.run_id }}"
 
@@ -59,4 +78,3 @@ jobs:
           done
 
           echo "Pembersihan selesai!"
-          
