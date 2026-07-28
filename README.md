@@ -18,4 +18,3 @@ Fully automated CI/CD pipeline built on top of GitHub Actions for 4.14 Non-GKI A
 - [KernelSU](https://github.com/tiann/KernelSU) by tiann
 - [AnyKernel3](https://github.com/osm0sis/AnyKernel3) by osm0sis
 - [Baseband-guard](https://github.com/vc-teahouse/Baseband-guard) by vc-teahouse
-- 
