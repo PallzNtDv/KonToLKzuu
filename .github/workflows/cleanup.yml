@@ -1,0 +1,50 @@
+name: Cleanup Workflow Runs
+
+on:
+  workflow_dispatch:
+    inputs:
+      del_type:
+        description: 'Pilih jenis pembersihan:'
+        required: true
+        type: choice
+        default: 'failed_only'
+        options:
+          - 'failed_only'
+          - 'all_runs'
+          - 'cleanup_runs_only'
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Delete Workflow Runs via GitHub CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DEL_TYPE="${{ inputs.del_type }}"
+          REPO="${{ github.repository }}"
+
+          echo "Memulai proses pembersihan dengan opsi: $DEL_TYPE"
+
+          if [ "$DEL_TYPE" = "failed_only" ]; then
+            echo "Menghapus semua riwayat workflow yang GAGAL atau DIBATALKAN..."
+            gh run list --repo "$REPO" --limit 1000 --json databaseId,conclusion --jq '.[] | select(.conclusion != "success" and .conclusion != "") | .databaseId' | xargs -r -n 1 gh run delete --repo "$REPO"
+
+          elif [ "$DEL_TYPE" = "all_runs" ]; then
+            echo "Menghapus SEMUA riwayat workflow..."
+            gh run list --repo "$REPO" --limit 1000 --json databaseId --jq '.[].databaseId' | xargs -r -n 1 gh run delete --repo "$REPO"
+
+          elif [ "$DEL_TYPE" = "cleanup_runs_only" ]; then
+            echo "Menghapus riwayat workflow Cleanup ini saja..."
+            gh run list --repo "$REPO" --workflow "Cleanup Workflow Runs" --limit 1000 --json databaseId --jq '.[].databaseId' | xargs -r -n 1 gh run delete --repo "$REPO"
+          fi
+
+          echo "Pembersihan selesai!"
+          
