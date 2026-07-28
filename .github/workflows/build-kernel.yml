@@ -235,7 +235,7 @@ jobs:
 
       - name: Clone Manager Source Code (${{ inputs.ksu_fork }})
         run: |
-          mkdir -p manager-src
+          rm -rf manager-src
           if [ "${{ inputs.ksu_fork }}" = "xxKSU" ]; then
             echo "Cloning xxKSU Manager..."
             git clone --depth=1 https://github.com/backslashxx/KernelSU.git manager-src
@@ -249,24 +249,29 @@ jobs:
 
       - name: Build Manager APK via Gradle
         run: |
-          cd manager-src
-          chmod +x gradlew
-          if [ -f "gradlew" ]; then
-            ./gradlew :app:assembleRelease --no-daemon
-          else
-            echo "Error: gradlew tidak ditemukan!"
+          # Deteksi otomatis direktori lokasi gradlew (misal: manager-src/manager/)
+          GRADLE_DIR=$(find manager-src -maxdepth 2 -name "gradlew" -exec dirname {} \;)
+
+          if [ -z "$GRADLE_DIR" ]; then
+            echo "Error: File gradlew tidak ditemukan di repositori!"
             exit 1
           fi
 
+          echo "Lokasi project Gradle terdeteksi di: $GRADLE_DIR"
+          cd "$GRADLE_DIR"
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease --no-daemon
+
       - name: Organize APK Artifact
         run: |
-          cd manager-src
-          mkdir -p ../output_apk
-          APK_FILE=$(find app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
-          if [ -f "$APK_FILE" ]; then
-            cp "$APK_FILE" "../output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk"
+          mkdir -p output_apk
+          APK_FILE=$(find manager-src -name "*.apk" | grep -i "release" | head -n 1)
+
+          if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
+            echo "Menemukan APK di: $APK_FILE"
+            cp "$APK_FILE" "output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk"
           else
-            echo "Error: File APK tidak ditemukan!"
+            echo "Error: File APK hasil kompilasi tidak ditemukan!"
             exit 1
           fi
 
@@ -275,4 +280,3 @@ jobs:
         with:
           name: ${{ inputs.ksu_fork }}-Manager-APK
           path: output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk
-          
