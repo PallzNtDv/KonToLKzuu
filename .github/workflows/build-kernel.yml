@@ -116,13 +116,16 @@ jobs:
           cd kernel-source
           if [ "${{ inputs.ksu_fork }}" = "xxKSU" ]; then
             echo "Setting up xxKSU..."
-            curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/main/kernel/setup.sh" | bash -s main
+            curl -fLSs "https://raw.githubusercontent.com/backslashxx/KernelSU/main/kernel/setup.sh" | bash -s main || \
+            curl -fLSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s master
           elif [ "${{ inputs.ksu_fork }}" = "SUKISU" ]; then
             echo "Setting up SUKISU..."
-            curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main
+            curl -fLSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main || \
+            curl -fLSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/master/kernel/setup.sh" | bash -s master
           else
             echo "Setting up Official KernelSU..."
-            curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
+            curl -fLSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main || \
+            curl -fLSs "https://raw.githubusercontent.com/tiann/KernelSU/master/kernel/setup.sh" | bash -s master
           fi
 
           HOOK_FILE="drivers/kernelsu/core_hook.c"
