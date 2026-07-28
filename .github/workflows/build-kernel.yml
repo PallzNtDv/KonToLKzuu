@@ -3,24 +3,21 @@ name: Build Kernel & Manager Worker
 on:
   workflow_call:
     inputs:
-      manifest_name:
-        required: true
-        type: string
       build_target:
         required: true
         type: string
       ksu_fork:
         required: true
         type: string
-      include_susfs:
+      manifest_name:
+        required: true
+        type: string
+      include_extra_features:
         required: true
         type: boolean
-      include_bbg:
+      toolchain:
         required: true
-        type: boolean
-      use_proton_clang:
-        required: true
-        type: boolean
+        type: string
 
 jobs:
   # =========================================================================
@@ -62,7 +59,7 @@ jobs:
           mkdir -p toolchain
           cd toolchain
           
-          if [ "${{ inputs.use_proton_clang }}" = "true" ]; then
+          if [ "${{ inputs.toolchain }}" = "proton-clang" ]; then
             echo "Downloading Proton-Clang..."
             git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
           else
@@ -133,7 +130,7 @@ jobs:
           fi
 
       - name: Apply Baseband-Guard (BBG)
-        if: inputs.include_bbg == true
+        if: inputs.include_extra_features == true
         run: |
           cd kernel-source
           echo "Memasang Baseband-guard..."
@@ -141,7 +138,7 @@ jobs:
           echo "CONFIG_BBG=y" >> arch/arm64/configs/$KERNEL_DEFCONFIG
 
       - name: Apply SUSFS Patch & Configs
-        if: inputs.include_susfs == true
+        if: inputs.include_extra_features == true
         run: |
           cd kernel-source
           echo "Memasang SUSFS 4.14 Patch & Configs..."
