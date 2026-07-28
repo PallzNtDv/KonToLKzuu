@@ -1,0 +1,278 @@
+name: Build Kernel Worker
+
+on:
+  workflow_call:
+    inputs:
+      manifest_name:
+        required: true
+        type: string
+      build_target:
+        required: true
+        type: string
+      ksu_fork:
+        required: true
+        type: string
+      include_susfs:
+        required: true
+        type: boolean
+      include_bbg:
+        required: true
+        type: boolean
+      use_proton_clang:
+        required: true
+        type: boolean
+
+jobs:
+  # =========================================================================
+  # JOB 1: BUILD KERNEL
+  # =========================================================================
+  build-kernel:
+    if: inputs.build_target == 'both' || inputs.build_target == 'kernel_only'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      ARCH: "arm64"
+      KERNEL_DEFCONFIG: "camellia_defconfig"
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Maximize Build Space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 8192
+          temp-reserve-mb: 2048
+          swap-size-mb: 8192
+          remove-dotnet: "true"
+          remove-android: "true"
+          remove-haskell: "true"
+          remove-codeql: "true"
+          remove-docker-images: "true"
+
+      - name: Setup Build Dependencies
+        run: |
+          sudo apt purge -y man-db /var/lib/man-db/auto-update || true
+          sudo apt update -qq
+          sudo apt install -y build-essential bc libncurses5-dev libssl-dev bison flex libelf-dev zip unzip git ccache curl aria2
+
+      - name: Download Toolchains
+        run: |
+          mkdir -p toolchain
+          cd toolchain
+          
+          if [ "${{ inputs.use_proton_clang }}" = "true" ]; then
+            echo "Downloading Proton-Clang..."
+            git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
+          else
+            echo "Downloading Official AOSP Clang..."
+            wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android11-release/clang-r383902.tar.gz
+            mkdir clang && tar -xf clang-r383902.tar.gz -C clang
+          fi
+          
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git gcc64
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git gcc32
+
+      - name: Sync Source from Selected Manifest
+        run: |
+          mkdir -p ~/.bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo
+          chmod a+rx ~/.bin/repo
+          export PATH=~/.bin:$PATH
+
+          # Cari file XML di folder .github/manifests/ atau manifest/
+          MANIFEST_FILE="${{ inputs.manifest_name }}.xml"
+          MANIFEST_PATH=""
+
+          if [ -f "$GITHUB_WORKSPACE/.github/manifests/$MANIFEST_FILE" ]; then
+            MANIFEST_PATH="$GITHUB_WORKSPACE/.github/manifests/$MANIFEST_FILE"
+          elif [ -f "$GITHUB_WORKSPACE/manifest/$MANIFEST_FILE" ]; then
+            MANIFEST_PATH="$GITHUB_WORKSPACE/manifest/$MANIFEST_FILE"
+          else
+            echo "Error: File $MANIFEST_FILE tidak ditemukan di folder .github/manifests/ atau manifest/!"
+            exit 1
+          fi
+
+          echo "Menggunakan manifest dari: $MANIFEST_PATH"
+
+          # Injeksi ke repositori lokal sementara agar repo init berjalan lancar
+          mkdir -p local-manifest
+          cp "$MANIFEST_PATH" local-manifest/default.xml
+          cd local-manifest
+          git init
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          git add default.xml
+          git commit -m "Init local manifest"
+          git branch -M main
+          cd ..
+
+          repo init -u ./local-manifest -b main
+          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
+
+      - name: Setup KSU Fork (${{ inputs.ksu_fork }})
+        run: |
+          cd kernel-source
+          if [ "${{ inputs.ksu_fork }}" = "xxKSU" ]; then
+            echo "Setting up xxKSU..."
+            curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/main/kernel/setup.sh" | bash -s main
+          elif [ "${{ inputs.ksu_fork }}" = "SUKISU" ]; then
+            echo "Setting up SUKISU..."
+            curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main
+          else
+            echo "Setting up Official KernelSU..."
+            curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
+          fi
+
+          # Patch Wajib Non-GKI 4.14: Mematikan Kprobes agar menggunakan VFS manual hooks
+          HOOK_FILE="drivers/kernelsu/core_hook.c"
+          if [ -f "$HOOK_FILE" ]; then
+            echo "Patching core_hook.c untuk manual hooks Non-GKI..."
+            sed -i 's/#ifdef CONFIG_KPROBES/#if 0/g' "$HOOK_FILE"
+          fi
+
+      - name: Apply Baseband-Guard (BBG)
+        if: inputs.include_bbg == true
+        run: |
+          cd kernel-source
+          echo "Memasang Baseband-guard..."
+          wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash || true
+          echo "CONFIG_BBG=y" >> arch/arm64/configs/$KERNEL_DEFCONFIG
+
+      - name: Apply SUSFS Patch & Configs
+        if: inputs.include_susfs == true
+        run: |
+          cd kernel-source
+          echo "Memasang SUSFS 4.14..."
+          if [ -d "../patches/susfs_4.14" ]; then
+            cp -r ../patches/susfs_4.14/* .
+          fi
+
+          DEFCONFIG_FILE="arch/arm64/configs/$KERNEL_DEFCONFIG"
+          echo "CONFIG_KSU_SUSFS=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_KSU_SUSFS_SUS_MAP=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> $DEFCONFIG_FILE
+
+      - name: Configure Kernel Defconfig
+        run: |
+          cd kernel-source
+          DEFCONFIG_FILE="arch/arm64/configs/$KERNEL_DEFCONFIG"
+          
+          echo "CONFIG_KSU=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_OVERLAY_FS=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_TMPFS_XATTR=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_TMPFS_POSIX_ACL=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_IP_NF_TARGET_TTL=y" >> $DEFCONFIG_FILE
+          echo "CONFIG_IP6_NF_TARGET_HL=y" >> $DEFCONFIG_FILE
+
+      - name: Build Kernel Image
+        run: |
+          cd kernel-source
+          export PATH=$GITHUB_WORKSPACE/toolchain/clang/bin:$GITHUB_WORKSPACE/toolchain/gcc64/bin:$GITHUB_WORKSPACE/toolchain/gcc32/bin:$PATH
+          
+          make O=out ARCH=${{ env.ARCH }} $KERNEL_DEFCONFIG
+          make -j$(nproc --all) O=out \
+            ARCH=${{ env.ARCH }} \
+            CC=clang \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-android- \
+            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
+            LD=ld.lld
+
+      - name: Package AnyKernel3
+        run: |
+          git clone https://github.com/osm0sis/AnyKernel3 AnyKernel3
+          
+          sed -i 's/device.name1=.*/device.name1=camellia/' AnyKernel3/anykernel.sh
+          sed -i 's/device.name2=.*/device.name2=camellian/' AnyKernel3/anykernel.sh
+          sed -i 's|block=.*|block=/dev/block/by-name/boot|' AnyKernel3/anykernel.sh
+          
+          if [ -f kernel-source/out/arch/arm64/boot/Image.gz-dtb ]; then
+            cp kernel-source/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
+          elif [ -f kernel-source/out/arch/arm64/boot/Image.gz ]; then
+            cp kernel-source/out/arch/arm64/boot/Image.gz AnyKernel3/
+          fi
+
+          cd AnyKernel3
+          zip -r9 ../LinuxxPU-${{ inputs.manifest_name }}-${{ inputs.ksu_fork }}.zip * -x .git README.md
+
+      - name: Upload Kernel Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LinuxxPU-${{ inputs.manifest_name }}-${{ inputs.ksu_fork }}
+          path: LinuxxPU-${{ inputs.manifest_name }}-${{ inputs.ksu_fork }}.zip
+
+  # =========================================================================
+  # JOB 2: BUILD MANAGER APP
+  # =========================================================================
+  build-manager:
+    if: inputs.build_target == 'both' || inputs.build_target == 'manager_only'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Clone Manager Source Code (${{ inputs.ksu_fork }})
+        run: |
+          mkdir -p manager-src
+          if [ "${{ inputs.ksu_fork }}" = "xxKSU" ]; then
+            echo "Cloning xxKSU Manager..."
+            git clone --depth=1 https://github.com/backslashxx/KernelSU.git manager-src
+          elif [ "${{ inputs.ksu_fork }}" = "SUKISU" ]; then
+            echo "Cloning SUKISU Manager..."
+            git clone --depth=1 https://github.com/SukiSU-Ultra/SukiSU-Manager.git manager-src || git clone --depth=1 https://github.com/SukiSU-Ultra/SukiSU-Ultra.git manager-src
+          else
+            echo "Cloning Official KernelSU Manager..."
+            git clone --depth=1 https://github.com/tiann/KernelSU.git manager-src
+          fi
+
+      - name: Build Manager APK via Gradle
+        run: |
+          cd manager-src
+          chmod +x gradlew
+          if [ -f "gradlew" ]; then
+            ./gradlew :app:assembleRelease --no-daemon
+          else
+            echo "Error: gradlew tidak ditemukan!"
+            exit 1
+          fi
+
+      - name: Organize APK Artifact
+        run: |
+          cd manager-src
+          mkdir -p ../output_apk
+          APK_FILE=$(find app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
+          if [ -f "$APK_FILE" ]; then
+            cp "$APK_FILE" "../output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk"
+          else
+            echo "Error: File APK tidak ditemukan!"
+            exit 1
+          fi
+
+      - name: Upload Manager APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.ksu_fork }}-Manager-APK
+          path: output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk
+          
