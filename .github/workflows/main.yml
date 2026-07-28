@@ -3,13 +3,8 @@ name: Kernel & Manager Builder (Caller)
 on:
   workflow_dispatch:
     inputs:
-      manifest_name:
-        description: 'Nama file XML di folder .github/manifest/ (tanpa .xml)'
-        required: true
-        type: string
-        default: 'camellia'
       build_target:
-        description: 'Pilih komponen yang ingin di-build'
+        description: 'What should be built?'
         required: true
         type: choice
         default: 'both'
@@ -17,8 +12,9 @@ on:
           - 'both'
           - 'kernel_only'
           - 'manager_only'
+
       ksu_fork:
-        description: 'Pilih Fork KernelSU'
+        description: 'Which ksu fork should be made?'
         required: true
         type: choice
         default: 'xxKSU'
@@ -26,30 +22,37 @@ on:
           - 'xxKSU'
           - 'SUKISU'
           - 'KernelSU'
-      include_susfs:
-        description: 'Sertakan Patch SUSFS 4.14'
+
+      manifest_name:
+        description: 'Which kernel should be built?'
+        required: true
+        type: choice
+        default: 'camellia'
+        options:
+          - 'camellia'
+
+      include_extra_features:
+        description: 'Support for additional managers & patches (SUSFS/BBG)?'
         required: true
         type: boolean
         default: true
-      include_bbg:
-        description: 'Sertakan Baseband-Guard (BBG)'
+
+      toolchain:
+        description: 'Kernel Toolchain (official AOSP or proton-clang)'
         required: true
-        type: boolean
-        default: true
-      use_proton_clang:
-        description: 'Gunakan Proton-Clang (True) atau AOSP Clang (False)'
-        required: true
-        type: boolean
-        default: true
+        type: choice
+        default: 'proton-clang'
+        options:
+          - 'proton-clang'
+          - 'aosp-clang'
 
 jobs:
   trigger-build:
     uses: ./.github/workflows/build-kernel.yml
     with:
-      manifest_name: ${{ inputs.manifest_name }}
       build_target: ${{ inputs.build_target }}
       ksu_fork: ${{ inputs.ksu_fork }}
-      include_susfs: ${{ inputs.include_susfs }}
-      include_bbg: ${{ inputs.include_bbg }}
-      use_proton_clang: ${{ inputs.use_proton_clang }}
+      manifest_name: ${{ inputs.manifest_name }}
+      include_extra_features: ${{ inputs.include_extra_features }}
+      toolchain: ${{ inputs.toolchain }}
     secrets: inherit
