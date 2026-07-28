@@ -1,0 +1,61 @@
+name: Playground & Debug Tool
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_target:
+        description: 'Pilih fungsi yang ingin diuji'
+        required: true
+        default: 'ksu_patch_test'
+        type: choice
+        options:
+          - ksu_patch_test
+          - random_package_id_gen
+
+jobs:
+  playground:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # TEST 1: Pengujian Patch xxKSU / KSU File
+      - name: Test KSU Extra Patching
+        if: inputs.test_target == 'ksu_patch_test'
+        run: |
+          echo "Cloning xxKSU untuk testing patch..."
+          git clone --depth=1 -b master https://github.com/backslashxx/KernelSU manager-src
+          
+          echo "Testing patch di drivers/kernelsu/ core_hook.c & extras.c..."
+          if [ -f "manager-src/kernel/extras.c" ]; then
+            sed -i 's/#ifdef CONFIG_KPROBES/#if 0/g' manager-src/kernel/extras.c
+            echo "✅ Patch extras.c berhasil!"
+          fi
+
+      # TEST 2: Generator Random Package ID & App Label (Obfuscation)
+      - name: Generate Random Package ID
+        if: inputs.test_target == 'random_package_id_gen'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y wamerican uni2ascii
+          dic=$(mktemp)
+          subdict=$(mktemp)
+          uni2ascii -B /usr/share/dict/american-english > $dic
+
+          rand=$(awk -v min=1 -v max="$(wc -l < $dic)" 'BEGIN{srand(); print int(min+rand()*(max-min+1))}')
+          app_label=$(awk "NR==${rand} {print}" $dic)
+
+          sed -E -n '/^.{3}$/p' $dic > $subdict
+          rand=$(awk -v min=1 -v max="$(wc -l < $subdict)" 'BEGIN{srand(); print int(min+rand()*(max-min+1))}')
+          p_id_1=$(awk "NR==${rand} {print}" $subdict)
+
+          sed -E -n '/^.{5}$/p' $dic > $subdict
+          rand=$(awk -v min=1 -v max="$(wc -l < $subdict)" 'BEGIN{srand(); print int(min+rand()*(max-min+1))}')
+          p_id_2=$(awk "NR==${rand} {print}" $subdict)
+
+          sed -E -n '/^.{7}$/p' $dic > $subdict
+          rand=$(awk -v min=1 -v max="$(wc -l < $subdict)" 'BEGIN{srand(); print int(min+rand()*(max-min+1))}')
+          p_id_3=$(awk "NR==${rand} {print}" $subdict)
+
+          echo "Generated App Label : $app_label"
+          echo "Generated Package ID: ${p_id_1}.${p_id_2}.${p_id_3}"
+
