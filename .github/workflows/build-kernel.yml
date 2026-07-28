@@ -81,21 +81,20 @@ jobs:
           chmod a+rx ~/.bin/repo
           export PATH=~/.bin:$PATH
 
-          MANIFEST_FILE="${{ inputs.manifest_name }}.xml"
-          MANIFEST_PATH=""
+          # Cari file manifest secara fleksibel (tidak peka huruf besar/kecil)
+          SEARCH_TARGET="${{ inputs.manifest_name }}.xml"
+          FOUND_FILE=$(find "$GITHUB_WORKSPACE" -maxdepth 4 -iname "$SEARCH_TARGET" | head -n 1)
 
-          if [ -f "$GITHUB_WORKSPACE/.github/manifest/$MANIFEST_FILE" ]; then
-            MANIFEST_PATH="$GITHUB_WORKSPACE/.github/manifest/$MANIFEST_FILE"
-          elif [ -f "$GITHUB_WORKSPACE/.github/manifests/$MANIFEST_FILE" ]; then
-            MANIFEST_PATH="$GITHUB_WORKSPACE/.github/manifests/$MANIFEST_FILE"
-          elif [ -f "$GITHUB_WORKSPACE/manifest/$MANIFEST_FILE" ]; then
-            MANIFEST_PATH="$GITHUB_WORKSPACE/manifest/$MANIFEST_FILE"
-          else
-            echo "Error: File manifest $MANIFEST_FILE tidak ditemukan!"
+          if [ -z "$FOUND_FILE" ] || [ ! -f "$FOUND_FILE" ]; then
+            echo "::error::File $SEARCH_TARGET TIDAK DITEMUKAN di repositori!"
+            echo "--- ISI STRUKTUR REPOSITORI SAAT INI ---"
+            ls -la "$GITHUB_WORKSPACE"
+            ls -la "$GITHUB_WORKSPACE/.github" || true
             exit 1
           fi
 
-          echo "Menggunakan manifest dari: $MANIFEST_PATH"
+          MANIFEST_PATH="$FOUND_FILE"
+          echo "✅ Menggunakan manifest dari: $MANIFEST_PATH"
 
           mkdir -p local-manifest
           cp "$MANIFEST_PATH" local-manifest/default.xml
