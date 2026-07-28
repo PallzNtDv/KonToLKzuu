@@ -15,7 +15,7 @@ on:
 
 permissions:
   actions: write
-  contents: write
+  contents: read
 
 jobs:
   cleanup:
@@ -30,21 +30,33 @@ jobs:
         run: |
           DEL_TYPE="${{ inputs.del_type }}"
           REPO="${{ github.repository }}"
+          CURRENT_RUN_ID="${{ github.run_id }}"
 
           echo "Memulai proses pembersihan dengan opsi: $DEL_TYPE"
 
           if [ "$DEL_TYPE" = "failed_only" ]; then
-            echo "Menghapus semua riwayat workflow yang GAGAL atau DIBATALKAN..."
-            gh run list --repo "$REPO" --limit 1000 --json databaseId,conclusion --jq '.[] | select(.conclusion != "success" and .conclusion != "") | .databaseId' | xargs -r -n 1 gh run delete --repo "$REPO"
+            echo "Menghapus riwayat workflow yang GAGAL / DIBATALKAN (hanya yang sudah selesai)..."
+            RUN_IDS=$(gh run list --repo "$REPO" --limit 1000 --json databaseId,status,conclusion --jq ".[] | select(.status == \"completed\" and (.conclusion != \"success\" and .conclusion != \"\") and (.databaseId | tostring) != \"$CURRENT_RUN_ID\") | .databaseId")
 
           elif [ "$DEL_TYPE" = "all_runs" ]; then
-            echo "Menghapus SEMUA riwayat workflow..."
-            gh run list --repo "$REPO" --limit 1000 --json databaseId --jq '.[].databaseId' | xargs -r -n 1 gh run delete --repo "$REPO"
+            echo "Menghapus SEMUA riwayat workflow (hanya yang sudah selesai)..."
+            RUN_IDS=$(gh run list --repo "$REPO" --limit 1000 --json databaseId,status --jq ".[] | select(.status == \"completed\" and (.databaseId | tostring) != \"$CURRENT_RUN_ID\") | .databaseId")
 
           elif [ "$DEL_TYPE" = "cleanup_runs_only" ]; then
-            echo "Menghapus riwayat workflow Cleanup ini saja..."
-            gh run list --repo "$REPO" --workflow "Cleanup Workflow Runs" --limit 1000 --json databaseId --jq '.[].databaseId' | xargs -r -n 1 gh run delete --repo "$REPO"
+            echo "Menghapus riwayat workflow Cleanup yang sudah selesai..."
+            RUN_IDS=$(gh run list --repo "$REPO" --workflow "Cleanup Workflow Runs" --limit 1000 --json databaseId,status --jq ".[] | select(.status == \"completed\" and (.databaseId | tostring) != \"$CURRENT_RUN_ID\") | .databaseId")
           fi
+
+          if [ -z "$RUN_IDS" ]; then
+            echo "Tidak ada riwayat workflow yang perlu dihapus."
+            exit 0
+          fi
+
+          echo "Menghapus workflow run secara aman..."
+          for RUN_ID in $RUN_IDS; do
+            echo "Menghapus Run ID: $RUN_ID"
+            gh run delete "$RUN_ID" --repo "$REPO" || echo "Gagal menghapus Run ID: $RUN_ID, mengabaikan..."
+          done
 
           echo "Pembersihan selesai!"
           
