@@ -19,6 +19,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: write
+
 jobs:
   # =========================================================================
   # JOB 1: BUILD KERNEL
@@ -275,4 +278,43 @@ jobs:
         with:
           name: ${{ inputs.ksu_fork }}-Manager-APK
           path: output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk
+
+  # =========================================================================
+  # JOB 3: PUBLISH TO GITHUB RELEASES
+  # =========================================================================
+  publish-release:
+    needs: [build-kernel, build-manager]
+    if: always() && !cancelled() && (needs.build-kernel.result == 'success' || needs.build-manager.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release_assets
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: release-${{ inputs.manifest_name }}-${{ inputs.ksu_fork }}-${{ github.run_number }}
+          name: "Build #${{ github.run_number }} - ${{ inputs.manifest_name }} (${{ inputs.ksu_fork }})"
+          body: |
+            ### 🚀 Kernel & Manager Build Details
+            - **Device Manifest**: `${{ inputs.manifest_name }}`
+            - **KernelSU Fork**: `${{ inputs.ksu_fork }}`
+            - **Build Target**: `${{ inputs.build_target }}`
+            - **Toolchain**: `${{ inputs.toolchain }}`
+            - **Extra Features (SUSFS & BBG)**: `${{ inputs.include_extra_features }}`
+          files: |
+            release_assets/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
