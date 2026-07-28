@@ -1,10 +1,10 @@
-name: Kernel & Manager Builder (Caller)
+name: Build Kernel & Tools (Automated Pipeline)
 
 on:
   workflow_dispatch:
     inputs:
       build_target:
-        description: 'What should be built?'
+        description: 'Pilih Target Build'
         required: true
         type: choice
         default: 'both'
@@ -12,33 +12,27 @@ on:
           - 'both'
           - 'kernel_only'
           - 'manager_only'
-
       ksu_fork:
-        description: 'Which ksu fork should be made?'
+        description: 'Pilih Fork KernelSU'
         required: true
         type: choice
         default: 'xxKSU'
         options:
           - 'xxKSU'
           - 'SUKISU'
-          - 'KernelSU'
-
+          - 'Official'
       manifest_name:
-        description: 'Which kernel should be built?'
+        description: 'Nama File Manifest (tanpa .xml)'
         required: true
-        type: choice
+        type: string
         default: 'camellia'
-        options:
-          - 'camellia'
-
       include_extra_features:
-        description: 'Support for additional managers & patches (SUSFS/BBG)?'
+        description: 'Sertakan SUSFS & Baseband-Guard (BBG)'
         required: true
         type: boolean
         default: true
-
       toolchain:
-        description: 'Kernel Toolchain (official AOSP or proton-clang)'
+        description: 'Pilih Toolchain Clang'
         required: true
         type: choice
         default: 'proton-clang'
@@ -46,8 +40,14 @@ on:
           - 'proton-clang'
           - 'aosp-clang'
 
+permissions:
+  contents: write
+
 jobs:
-  trigger-build:
+  # -------------------------------------------------------------------------
+  # JOB 1: OTOMATIS MEMANGGIL WORKER KERNEL & MANAGER
+  # -------------------------------------------------------------------------
+  build-kernel-and-manager:
     uses: ./.github/workflows/build-kernel.yml
     with:
       build_target: ${{ inputs.build_target }}
@@ -56,3 +56,15 @@ jobs:
       include_extra_features: ${{ inputs.include_extra_features }}
       toolchain: ${{ inputs.toolchain }}
     secrets: inherit
+
+  # -------------------------------------------------------------------------
+  # JOB 2: OTOMATIS MEMANGGIL WORKER LPUD (Jika xxKSU / SUKISU dipilih)
+  # -------------------------------------------------------------------------
+  build-lpud-binary:
+    if: inputs.ksu_fork == 'xxKSU' || inputs.ksu_fork == 'SUKISU'
+    uses: ./.github/workflows/build-lpud.yml
+    with:
+      ksu_fork: ${{ inputs.ksu_fork }}
+      target_arch: 'aarch64-linux-android'
+    secrets: inherit
+    
