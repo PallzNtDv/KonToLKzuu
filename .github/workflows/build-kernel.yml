@@ -670,10 +670,16 @@ jobs:
             * **Toolchain**: `${{ inputs.toolchain }}`
             * **Build Date**: `${{ env.DATE_TAG }}`
 
-            #### 🛠️ Included Features
+            #### 🛠️ Active Features
             * **KernelSU Engine**: `${{ inputs.ksu_fork }}`
             * **SUSFS**: `${{ inputs.include_susfs }}`
             * **Baseband-Guard**: `${{ inputs.include_bbg }}`
+            * **ThinLTO & -O3**: `${{ inputs.enable_lto }}`
+            * **WireGuard**: `${{ inputs.inject_wireguard }}`
+            * **F2FS Backport**: `${{ inputs.inject_f2fs }}`
+            * **ZRAM ZSTD**: `${{ inputs.enable_zram_zstd }}`
+            * **TCP BBR**: `${{ inputs.enable_bbr }}`
+            * **TTL Spoofing**: `${{ inputs.enable_ttl }}`
 
             ---
             *📦 File SHA256 Checksum:*
@@ -692,6 +698,12 @@ jobs:
           TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
           MANIFEST: "${{ inputs.manifest_name }}"
           KSU: "${{ inputs.ksu_fork }}"
+          LTO: "${{ inputs.enable_lto }}"
+          WG: "${{ inputs.inject_wireguard }}"
+          F2FS: "${{ inputs.inject_f2fs }}"
+          ZSTD: "${{ inputs.enable_zram_zstd }}"
+          BBR: "${{ inputs.enable_bbr }}"
+          TTL: "${{ inputs.enable_ttl }}"
         run: |
           python3 << 'EOF'
           import os, glob, subprocess
@@ -701,14 +713,31 @@ jobs:
           manifest = os.environ.get("MANIFEST", "")
           ksu = os.environ.get("KSU", "")
 
+          # Membaca toggle fitur
+          lto = os.environ.get("LTO") == "true"
+          wg = os.environ.get("WG") == "true"
+          f2fs = os.environ.get("F2FS") == "true"
+          zstd = os.environ.get("ZSTD") == "true"
+          bbr = os.environ.get("BBR") == "true"
+          ttl = os.environ.get("TTL") == "true"
+
+          features = []
+          if lto: features.append("⚡ ThinLTO & -O3")
+          if wg: features.append("🛡️ WireGuard")
+          if f2fs: features.append("📁 F2FS Backport")
+          if zstd: features.append("🗜️ ZRAM ZSTD")
+          if bbr: features.append("🌐 TCP BBR")
+          if ttl: features.append("📡 TTL Spoofing")
+
+          feature_str = "\n".join([f"  • {f}" for f in features]) if features else "  • Default Configuration"
+
           if token and chat_id:
-              # 1. Kirim File ZIP Kernel + Hash SHA256
+              # 1. Kirim File ZIP Kernel + Hash SHA256 & Daftar Fitur
               zips = glob.glob("release_assets/*.zip")
               for zip_file in zips:
                   name = os.path.basename(zip_file)
                   size = subprocess.check_output(["du", "-h", zip_file]).decode().split()[0]
                   
-                  # Cari berkas SHA256 terkait
                   sha_file = zip_file + ".sha256"
                   sha_hash = "N/A"
                   if os.path.exists(sha_file):
@@ -719,6 +748,7 @@ jobs:
                       f"⚡ *LinuxxPU Kernel Ready!*\n\n"
                       f"📱 *Device:* {manifest}\n"
                       f"⚙️ *KSU Engine:* {ksu}\n"
+                      f"🛠️ *Active Features:*\n{feature_str}\n\n"
                       f"📦 *File:* `{name}`\n"
                       f"📊 *Size:* {size}\n"
                       f"🔑 *SHA256:* `{sha_hash}`"
