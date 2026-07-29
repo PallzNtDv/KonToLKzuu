@@ -52,30 +52,15 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Send Telegram Start Notification
-        env:
-          TELEGRAM_TOKEN: "${{ secrets.TELEGRAM_TOKEN }}"
-          TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
-          MANIFEST_NAME: "${{ inputs.manifest_name }}"
-          BUILD_TARGET: "${{ inputs.build_target }}"
-          KSU_FORK: "${{ inputs.ksu_fork }}"
-          TOOLCHAIN: "${{ inputs.toolchain }}"
-          EXTRA_FEATURES: "${{ inputs.include_extra_features }}"
-          RUN_NUMBER: "${{ github.run_number }}"
         run: |
-          if [ -n "$TELEGRAM_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-              -d "chat_id=${TELEGRAM_CHAT_ID}" \
+          TOKEN="${{ secrets.TELEGRAM_TOKEN }}"
+          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+          if [ -n "$TOKEN" ] && [ -n "$CHAT_ID" ]; then
+            TEXT="⚡ *LinuxxPU Build Engine Initialized*\n\n📱 *Device:* ${{ inputs.manifest_name }}\n🎯 *Target:* ${{ inputs.build_target }}\n🔑 *KSU:* ${{ inputs.ksu_fork }}\n🛠️ *Toolchain:* ${{ inputs.toolchain }}\n🛡️ *SUSFS & BBG:* ${{ inputs.include_extra_features }}\n🔢 *Run:* #${{ github.run_number }}\n\n⚙️ *Status:* Compiling source code..."
+            curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+              -d "chat_id=${CHAT_ID}" \
               -d "parse_mode=Markdown" \
-              --data-urlencode "text=⚡ *LinuxxPU Build Engine Initialized*
-
-          📱 *Device Target:* $MANIFEST_NAME
-          🎯 *Build Target:* $BUILD_TARGET
-          🔑 *KSU Engine:* $KSU_FORK
-          🛠️ *Toolchain:* $TOOLCHAIN
-          🛡️ *SUSFS & BBG:* $EXTRA_FEATURES
-          🔢 *Build Run:* #$RUN_NUMBER
-
-          ⚙️ *Status:* Compiling source code..."
+              --data-urlencode "text=$(printf "$TEXT")"
           fi
 
       - name: Setup Build Dependencies
@@ -244,20 +229,14 @@ jobs:
 
       - name: Send Telegram Failure Notification (Kernel)
         if: failure()
-        env:
-          TELEGRAM_TOKEN: "${{ secrets.TELEGRAM_TOKEN }}"
-          TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
-          MANIFEST_NAME: "${{ inputs.manifest_name }}"
-          KSU_FORK: "${{ inputs.ksu_fork }}"
         run: |
-          if [ -n "$TELEGRAM_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-              -d "chat_id=${TELEGRAM_CHAT_ID}" \
+          TOKEN="${{ secrets.TELEGRAM_TOKEN }}"
+          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+          if [ -n "$TOKEN" ] && [ -n "$CHAT_ID" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+              -d "chat_id=${CHAT_ID}" \
               -d "parse_mode=Markdown" \
-              --data-urlencode "text=❌ *Build Kernel Failed!*
-
-          📱 *Device:* $MANIFEST_NAME
-          ⚙️ *Fork:* $KSU_FORK"
+              -d "text=❌ *Build Kernel Failed!*%0A📱 *Device:* ${{ inputs.manifest_name }}%0A⚙️ *Fork:* ${{ inputs.ksu_fork }}"
           fi
 
   # =========================================================================
@@ -274,26 +253,15 @@ jobs:
 
       - name: Send Telegram Start Notification (Manager Only)
         if: inputs.build_target == 'manager_only'
-        env:
-          TELEGRAM_TOKEN: "${{ secrets.TELEGRAM_TOKEN }}"
-          TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
-          MANIFEST_NAME: "${{ inputs.manifest_name }}"
-          BUILD_TARGET: "${{ inputs.build_target }}"
-          KSU_FORK: "${{ inputs.ksu_fork }}"
-          RUN_NUMBER: "${{ github.run_number }}"
         run: |
-          if [ -n "$TELEGRAM_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-              -d "chat_id=${TELEGRAM_CHAT_ID}" \
+          TOKEN="${{ secrets.TELEGRAM_TOKEN }}"
+          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+          if [ -n "$TOKEN" ] && [ -n "$CHAT_ID" ]; then
+            TEXT="⚡ *LinuxxPU Build Engine Initialized*\n\n📱 *Device:* ${{ inputs.manifest_name }}\n🎯 *Target:* ${{ inputs.build_target }}\n🔑 *KSU:* ${{ inputs.ksu_fork }}\n🔢 *Run:* #${{ github.run_number }}\n\n⚙️ *Status:* Compiling Manager APK..."
+            curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+              -d "chat_id=${CHAT_ID}" \
               -d "parse_mode=Markdown" \
-              --data-urlencode "text=⚡ *LinuxxPU Build Engine Initialized*
-
-          📱 *Device Target:* $MANIFEST_NAME
-          🎯 *Build Target:* $BUILD_TARGET
-          🔑 *KSU Engine:* $KSU_FORK
-          🔢 *Build Run:* #$RUN_NUMBER
-
-          ⚙️ *Status:* Compiling Manager APK..."
+              --data-urlencode "text=$(printf "$TEXT")"
           fi
 
       - name: Setup Java JDK 21
@@ -351,18 +319,14 @@ jobs:
 
       - name: Send Telegram Failure Notification (Manager)
         if: failure()
-        env:
-          TELEGRAM_TOKEN: "${{ secrets.TELEGRAM_TOKEN }}"
-          TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
-          KSU_FORK: "${{ inputs.ksu_fork }}"
         run: |
-          if [ -n "$TELEGRAM_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-              -d "chat_id=${TELEGRAM_CHAT_ID}" \
+          TOKEN="${{ secrets.TELEGRAM_TOKEN }}"
+          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+          if [ -n "$TOKEN" ] && [ -n "$CHAT_ID" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+              -d "chat_id=${CHAT_ID}" \
               -d "parse_mode=Markdown" \
-              --data-urlencode "text=❌ *Build Manager Failed!*
-
-          ⚙️ *Fork:* $KSU_FORK"
+              -d "text=❌ *Build Manager Failed!*%0A⚙️ *Fork:* ${{ inputs.ksu_fork }}"
           fi
 
   # =========================================================================
@@ -406,13 +370,10 @@ jobs:
 
       - name: Send Built Files (Kernel & Manager) to Telegram
         if: success()
-        env:
-          TELEGRAM_TOKEN: "${{ secrets.TELEGRAM_TOKEN }}"
-          TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
-          MANIFEST_NAME: "${{ inputs.manifest_name }}"
-          KSU_FORK: "${{ inputs.ksu_fork }}"
         run: |
-          if [ -n "$TELEGRAM_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+          TOKEN="${{ secrets.TELEGRAM_TOKEN }}"
+          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+          if [ -n "$TOKEN" ] && [ -n "$CHAT_ID" ]; then
             KERNEL_ZIP=$(find release_assets -type f -name "*.zip" | head -n 1)
             MANAGER_APK=$(find release_assets -type f -name "*.apk" | head -n 1)
 
@@ -421,16 +382,11 @@ jobs:
               ZIP_SIZE=$(du -h "$KERNEL_ZIP" | cut -f1)
               
               echo "Sending Kernel Zip to Telegram..."
-              curl -s -F chat_id="${TELEGRAM_CHAT_ID}" \
+              curl -s -F chat_id="${CHAT_ID}" \
                    -F document=@"$KERNEL_ZIP" \
                    -F parse_mode="Markdown" \
-                   --form-string "caption=⚡ *LinuxxPU Kernel Ready!*
-
-          📱 *Device:* $MANIFEST_NAME
-          ⚙️ *KSU Fork:* $KSU_FORK
-          📦 *File:* \`$ZIP_NAME\`
-          📊 *Size:* $ZIP_SIZE" \
-                   "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument"
+                   -F "caption=⚡ *LinuxxPU Kernel Ready!*%0A%0A📱 *Device:* ${{ inputs.manifest_name }}%0A⚙️ *KSU Fork:* ${{ inputs.ksu_fork }}%0A📦 *File:* \`$ZIP_NAME\`%0A📊 *Size:* $ZIP_SIZE" \
+                   "https://api.telegram.org/bot${TOKEN}/sendDocument"
             fi
 
             if [ -f "$MANAGER_APK" ]; then
@@ -438,15 +394,11 @@ jobs:
               APK_SIZE=$(du -h "$MANAGER_APK" | cut -f1)
               
               echo "Sending Manager APK to Telegram..."
-              curl -s -F chat_id="${TELEGRAM_CHAT_ID}" \
+              curl -s -F chat_id="${CHAT_ID}" \
                    -F document=@"$MANAGER_APK" \
                    -F parse_mode="Markdown" \
-                   --form-string "caption=📱 *LinuxxPU Manager App!*
-
-          ⚙️ *Fork:* $KSU_FORK
-          📦 *File:* \`$APK_NAME\`
-          📊 *Size:* $APK_SIZE" \
-                   "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument"
+                   -F "caption=📱 *LinuxxPU Manager App!*%0A%0A⚙️ *Fork:* ${{ inputs.ksu_fork }}%0A📦 *File:* \`$APK_NAME\`%0A📊 *Size:* $APK_SIZE" \
+                   "https://api.telegram.org/bot${TOKEN}/sendDocument"
             fi
           fi
           
