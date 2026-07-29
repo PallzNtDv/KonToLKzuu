@@ -56,17 +56,17 @@ jobs:
         run: |
           MESSAGE="⚡ *LinuxxPU Build Engine Initialized*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━
-📱 *Device Target:* \`${{ inputs.manifest_name }}\`
-🎯 *Build Target:* \`${{ inputs.build_target }}\`
-🔑 *KSU Engine:* \`${{ inputs.ksu_fork }}\`
-🛠️ *Toolchain:* \`${{ inputs.toolchain }}\`
-🛡️ *SUSFS & BBG:* \`${{ inputs.include_extra_features }}\`
-🔢 *Build Run:* \`#${{ github.run_number }}\`
-━━━━━━━━━━━━━━━━━━━━━━━━━
-⚙️ *Status:* \`Compiling source code...\`
+          ━━━━━━━━━━━━━━━━━━━━━━━━━
+          📱 *Device Target:* \`${{ inputs.manifest_name }}\`
+          🎯 *Build Target:* \`${{ inputs.build_target }}\`
+          🔑 *KSU Engine:* \`${{ inputs.ksu_fork }}\`
+          🛠️ *Toolchain:* \`${{ inputs.toolchain }}\`
+          🛡️ *SUSFS & BBG:* \`${{ inputs.include_extra_features }}\`
+          🔢 *Build Run:* \`#${{ github.run_number }}\`
+          ━━━━━━━━━━━━━━━━━━━━━━━━━
+          ⚙️ *Status:* \`Compiling source code...\`
 
-🔗 [View Live Workflow Log](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          🔗 [View Live Workflow Log](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
 
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
             -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
@@ -104,7 +104,6 @@ jobs:
           chmod a+rx ~/.bin/repo
           export PATH=~/.bin:$PATH
 
-          # Cari file manifest secara fleksibel (tidak peka huruf besar/kecil)
           SEARCH_TARGET="${{ inputs.manifest_name }}.xml"
           FOUND_FILE=$(find "$GITHUB_WORKSPACE" -maxdepth 4 -iname "$SEARCH_TARGET" | head -n 1)
 
@@ -259,21 +258,21 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # --- Telegram Build Start Notification (Hanya jika memilih manager_only) ---
+      # --- Telegram Build Start Notification (Manager Only) ---
       - name: Send Telegram Start Notification (Manager Only)
         if: inputs.build_target == 'manager_only'
         run: |
           MESSAGE="⚡ *LinuxxPU Build Engine Initialized*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━
-📱 *Device Target:* \`${{ inputs.manifest_name }}\`
-🎯 *Build Target:* \`${{ inputs.build_target }}\`
-🔑 *KSU Engine:* \`${{ inputs.ksu_fork }}\`
-🔢 *Build Run:* \`#${{ github.run_number }}\`
-━━━━━━━━━━━━━━━━━━━━━━━━━
-⚙️ *Status:* \`Compiling Manager APK...\`
+          ━━━━━━━━━━━━━━━━━━━━━━━━━
+          📱 *Device Target:* \`${{ inputs.manifest_name }}\`
+          🎯 *Build Target:* \`${{ inputs.build_target }}\`
+          🔑 *KSU Engine:* \`${{ inputs.ksu_fork }}\`
+          🔢 *Build Run:* \`#${{ github.run_number }}\`
+          ━━━━━━━━━━━━━━━━━━━━━━━━━
+          ⚙️ *Status:* \`Compiling Manager APK...\`
 
-🔗 [View Live Workflow Log](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          🔗 [View Live Workflow Log](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
 
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
             -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
@@ -390,7 +389,6 @@ jobs:
           KERNEL_ZIP=$(find release_assets -type f -name "*.zip" | head -n 1)
           MANAGER_APK=$(find release_assets -type f -name "*.apk" | head -n 1)
 
-          # --- Kirim Kernel Zip ke Telegram ---
           if [ -f "$KERNEL_ZIP" ]; then
             ZIP_NAME=$(basename "$KERNEL_ZIP")
             ZIP_SIZE=$(du -h "$KERNEL_ZIP" | cut -f1)
@@ -403,7 +401,6 @@ jobs:
                  "https://api.telegram.org/bot${TOKEN}/sendDocument"
           fi
 
-          # --- Kirim Manager APK ke Telegram ---
           if [ -f "$MANAGER_APK" ]; then
             APK_NAME=$(basename "$MANAGER_APK")
             APK_SIZE=$(du -h "$MANAGER_APK" | cut -f1)
