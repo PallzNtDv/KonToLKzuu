@@ -29,357 +29,10 @@ on:
 
 permissions:
   contents: write
-
 jobs:
-  # =========================================================================
-  # JOB 1: BUILD KERNEL
-  # =========================================================================
-  build-kernel:
-    if: inputs.build_target == 'both' || inputs.build_target == 'kernel_only'
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-
-    env:
-      ARCH: "arm64"
-      KERNEL_DEFCONFIG: "camellia_defconfig"
-
-    steps:
-      - name: Maximize Build Space
-        uses: easimon/maximize-build-space@master
-        with:
-          root-reserve-mb: 8192
-          temp-reserve-mb: 2048
-          swap-size-mb: 8192
-          remove-dotnet: "true"
-          remove-android: "true"
-          remove-haskell: "true"
-          remove-codeql: "true"
-          remove-docker-images: "true"
-
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      # --- Telegram Build Start Notification ---
-      - name: Send Telegram Start Notification
-        env:
-          TELEGRAM_TOKEN: "${{ secrets.TELEGRAM_TOKEN }}"
-          TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
-          MANIFEST: "${{ inputs.manifest_name }}"
-          TARGET: "${{ inputs.build_target }}"
-          KSU: "${{ inputs.ksu_fork }}"
-          TOOLCHAIN: "${{ inputs.toolchain }}"
-          SUSFS: "${{ inputs.include_susfs }}"
-          BBG: "${{ inputs.include_bbg }}"
-          RUN_NUM: "${{ github.run_number }}"
-        run: |
-          python3 << 'EOF'
-          import os, urllib.request, urllib.parse
-          token = os.environ.get("TELEGRAM_TOKEN")
-          chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-          manifest = os.environ.get("MANIFEST", "")
-          target = os.environ.get("TARGET", "")
-          ksu = os.environ.get("KSU", "")
-          toolchain = os.environ.get("TOOLCHAIN", "")
-          susfs = os.environ.get("SUSFS", "")
-          bbg = os.environ.get("BBG", "")
-          run_num = os.environ.get("RUN_NUM", "")
-
-          if token and chat_id:
-              text = f"⚡ *LinuxxPU Build Engine Initialized*\n\n📱 *Device:* {manifest}\n🎯 *Target:* {target}\n🔑 *KSU Engine:* {ksu}\n🛠️ *Toolchain:* {toolchain}\n🛡️ *SUSFS:* {susfs}\n🔰 *Baseband-Guard:* {bbg}\n🔢 *Build Run:* #{run_num}\n\n⚙️ *Status:* Compiling source code..."
-              data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode()
-              req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
-              try:
-                  urllib.request.urlopen(req)
-              except Exception as e:
-                  print("Telegram notification error:", e)
-          EOF
-
-      - name: Setup Build Dependencies
-        run: |
-          sudo apt purge -y man-db /var/lib/man-db/auto-update || true
-          sudo apt update -qq
-          sudo apt install -y build-essential bc libncurses5-dev libssl-dev bison flex libelf-dev zip unzip git ccache curl aria2
-
-      - name: Download Toolchains
-        run: |
-          mkdir -p toolchain
-          cd toolchain
-
-          case "${{ inputs.toolchain }}" in
-            "proton-clang")
-              echo "Downloading Proton-Clang..."
-              git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
-              ;;
-            "zyc-clang")
-              echo "Downloading ZyC Clang..."
-              
-              # 1. Coba ambil URL via GitLab Release API
-              URL=$(curl -sSL -H "User-Agent: Mozilla/5.0" "https://gitlab.com/api/v4/projects/28003182/releases" | jq -r '.[0].assets.links[]?.url // .[0].description // empty' 2>/dev/null | grep -oE 'https://[^\s"\)]+\.tar\.(gz|xz)' | head -n 1)
-
-              # 2. Coba via GitLab Package Registry API (Lebih stabil dari Cloudflare block)
-              if [ -z "$URL" ]; then
-                echo "⚠️ Release API terblokir, mencoba jalur GitLab Package Registry..."
-                PKG_DATA=$(curl -sSL -H "User-Agent: Mozilla/5.0" "https://gitlab.com/api/v4/projects/28003182/packages")
-                PKG_ID=$(echo "$PKG_DATA" | jq -r '.[0].id // empty' 2>/dev/null)
-                PKG_VER=$(echo "$PKG_DATA" | jq -r '.[0].version // empty' 2>/dev/null)
-
-                if [ -n "$PKG_ID" ] && [ -n "$PKG_VER" ]; then
-                  FILE_NAME=$(curl -sSL -H "User-Agent: Mozilla/5.0" "https://gitlab.com/api/v4/projects/28003182/packages/$PKG_ID/package_files" | jq -r '.[0].file_name // empty' 2>/dev/null)
-                  [ -n "$FILE_NAME" ] && URL="https://gitlab.com/api/v4/projects/28003182/packages/generic/ZyC-Clang/$PKG_VER/$FILE_NAME"
-                fi
-              fi
-
-              # 3. Proses unduh jika URL ditemukan
-              SUCCESS=false
-              if [ -n "$URL" ]; then
-                echo "🔗 Downloading from: $URL"
-                curl -sSL -H "User-Agent: Mozilla/5.0" "$URL" -o zyc-clang.archive || true
-                
-                # Verifikasi keabsahan file tar/gz
-                if tar -tf zyc-clang.archive >/dev/null 2>&1; then
-                  echo "✅ ZyC Clang berhasil diunduh dan diverifikasi!"
-                  mkdir clang
-                  tar -xf zyc-clang.archive -C clang --strip-components=1 2>/dev/null || tar -xf zyc-clang.archive -C clang
-                  rm -f zyc-clang.archive
-                  SUCCESS=true
-                fi
-              fi
-
-              # 4. Fallback otomatis jika ZyC Clang terblokir total oleh GitLab
-              if [ "$SUCCESS" = false ]; then
-                echo "⚠️ GitLab memblokir unduhan ZyC-Clang (403/Cloudflare). Beralih otomatis ke Proton-Clang sebagai fallback..."
-                rm -rf clang zyc-clang.archive
-                git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
-              fi
-              ;;
-            "azure-clang")
-              echo "Downloading Azure Clang..."
-              git clone --depth=1 https://github.com/P3RF3CT-ST34LTH/azure-clang.git clang
-              ;;
-            "eva-clang")
-              echo "Downloading Eva GCC / Clang..."
-              git clone --depth=1 https://github.com/mvaisakh/gcc-arm64.git clang
-              ;;
-            *)
-              echo "Downloading Official AOSP Clang..."
-              wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android11-release/clang-r383902.tar.gz
-              mkdir clang && tar -xf clang-r383902.tar.gz -C clang
-              ;;
-          esac
-          
-          # GCC 4.9 cross-compiler tetap di-download sebagai pendukung
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git gcc64
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git gcc32
-
-      - name: Sync Kernel Source from Manifest
-        run: |
-          mkdir -p ~/.bin
-          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo
-          chmod a+rx ~/.bin/repo
-          export PATH=~/.bin:$PATH
-
-          SEARCH_TARGET="${{ inputs.manifest_name }}.xml"
-          FOUND_FILE=$(find "$GITHUB_WORKSPACE" -maxdepth 4 -iname "$SEARCH_TARGET" | head -n 1)
-
-          if [ -z "$FOUND_FILE" ] || [ ! -f "$FOUND_FILE" ]; then
-            echo "::error::File $SEARCH_TARGET TIDAK DITEMUKAN di repositori!"
-            echo "--- ISI STRUKTUR REPOSITORI SAAT INI ---"
-            ls -la "$GITHUB_WORKSPACE"
-            ls -la "$GITHUB_WORKSPACE/.github" || true
-            exit 1
-          fi
-
-          MANIFEST_PATH="$FOUND_FILE"
-          echo "✅ Menggunakan manifest dari: $MANIFEST_PATH"
-
-          mkdir -p local-manifest
-          cp "$MANIFEST_PATH" local-manifest/default.xml
-          cd local-manifest
-          git init
-          git config user.name "GitHub Action"
-          git config user.email "action@github.com"
-          git add default.xml
-          git commit -m "Local manifest init"
-          git branch -M main
-          cd ..
-
-          repo init -u ./local-manifest -b main
-          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
-          repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
-
-      - name: Setup KSU Fork ("${{ inputs.ksu_fork }}")
-        run: |
-          cd kernel-source
-          if [ "${{ inputs.ksu_fork }}" = "xxKSU" ]; then
-            echo "Setting up xxKSU..."
-            curl -fLSs "https://raw.githubusercontent.com/backslashxx/KernelSU/main/kernel/setup.sh" | bash -s main || \
-            curl -fLSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s master
-          elif [ "${{ inputs.ksu_fork }}" = "SUKISU" ]; then
-            echo "Setting up SUKISU..."
-            curl -fLSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main || \
-            curl -fLSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/master/kernel/setup.sh" | bash -s master
-          else
-            echo "Setting up Official KernelSU..."
-            curl -fLSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main || \
-            curl -fLSs "https://raw.githubusercontent.com/tiann/KernelSU/master/kernel/setup.sh" | bash -s master
-          fi
-
-          HOOK_FILE="drivers/kernelsu/core_hook.c"
-          if [ -f "$HOOK_FILE" ]; then
-            echo "Patching core_hook.c untuk manual hooks Non-GKI..."
-            sed -i 's/#ifdef CONFIG_KPROBES/#if 0/g' "$HOOK_FILE"
-          fi
-
-      - name: Apply Manual Hooks for Official KSU (4.14 Non-GKI)
-        if: inputs.ksu_fork == 'Official'
-        run: |
-          cd kernel-source
-          echo "Applying Manual Hooks for Official KSU on 4.14..."
-          
-          # Inject KSU ke drivers/Makefile dan drivers/Kconfig jika belum ada
-          grep -q "kernelsu" drivers/Makefile || echo "obj-y += kernelsu/" >> drivers/Makefile
-          grep -q "kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
-          
-          # Patch manual hooks ke fs/open.c, fs/read_write.c, fs/stat.c, fs/exec.c
-          # (Pastikan kamu memiliki file patch manual_hooks.patch di repo kamu)
-          if [ -f "../patches/ksu_manual_hooks_4.14.patch" ]; then
-            patch -p1 < ../patches/ksu_manual_hooks_4.14.patch
-          fi
-          
-      - name: Apply Baseband-Guard (BBG)
-        if: inputs.include_extra_features == true
-        run: |
-          cd kernel-source
-          echo "Memasang Baseband-guard..."
-          wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash || true
-          echo "CONFIG_BBG=y" >> arch/arm64/configs/$KERNEL_DEFCONFIG
-
-      - name: Apply SUSFS Patch & Configs
-        if: inputs.include_extra_features == true
-        run: |
-          cd kernel-source
-          echo "Memasang SUSFS 4.14 Patch & Configs..."
-          if [ -d "../patches/susfs_4.14" ]; then
-            cp -r ../patches/susfs_4.14/* .
-          fi
-
-          DEFCONFIG_FILE="arch/arm64/configs/$KERNEL_DEFCONFIG"
-          echo "CONFIG_KSU_SUSFS=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_KSU_SUSFS_SUS_MAP=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> $DEFCONFIG_FILE
-
-      - name: Configure Kernel Defconfig
-        run: |
-          cd kernel-source
-          DEFCONFIG_FILE="arch/arm64/configs/$KERNEL_DEFCONFIG"
-          
-          echo "CONFIG_KSU=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_OVERLAY_FS=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_TMPFS_XATTR=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_TMPFS_POSIX_ACL=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_IP_NF_TARGET_TTL=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_IP6_NF_TARGET_HL=y" >> $DEFCONFIG_FILE
-
-      - name: Setup & Restore ccache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ccache
-          key: ccache-${{ runner.os }}-${{ inputs.toolchain }}-${{ github.sha }}
-          restore-keys: |
-            ccache-${{ runner.os }}-${{ inputs.toolchain }}-
-            ccache-${{ runner.os }}-
-
-      - name: Configure ccache
-        run: |
-          sudo apt-get update && sudo apt-get install -y ccache
-          
-          # Konfigurasi ccache
-          export CCACHE_DIR=~/.cache/ccache
-          ccache -M 5G                      # Set batas maksimum cache ke 5GB
-          ccache -o compression=true         # Aktifkan kompresi agar hemat ruang
-          ccache -z                         # Reset statistik untuk running kali ini          
-
-      - name: Build Kernel Image
-        run: |
-          cd kernel-source
-
-          # Hapus ld tua bawaan Clang agar host tool (fixdep) menggunakan system ld milik Ubuntu
-          rm -f $GITHUB_WORKSPACE/toolchain/clang/bin/ld
-          
-          export PATH=$GITHUB_WORKSPACE/toolchain/clang/bin:$GITHUB_WORKSPACE/toolchain/gcc64/bin:$GITHUB_WORKSPACE/toolchain/gcc32/bin:$PATH
-          export CCACHE_DIR=~/.cache/ccache
-          
-          # Build defconfig
-          make O=out ARCH=${{ env.ARCH }} $KERNEL_DEFCONFIG
-          
-          # Build Kernel Image dengan ccache
-          make -j$(nproc --all) O=out \
-            ARCH=${{ env.ARCH }} \
-            CC="ccache clang" \
-            CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-android- \
-            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
-            LD=ld.lld
-
-          # Tampilkan statistik cache di log runner
-          echo "=================================================="
-          echo "📊 CCACHE STATS"
-          echo "=================================================="
-          ccache -s
-
-      - name: Package AnyKernel3 & Generate SHA256
-        run: |
-          # 1. Clone repositori AnyKernel3 jika belum ada di workspace
-          if [ ! -d "AnyKernel3" ]; then
-            echo "📥 Cloning AnyKernel3 repository..."
-            # Ganti URL di bawah dengan repositori AnyKernel3 spesifik Camellia milikmu
-name: Build Kernel & Manager Worker
-
-on:
-  workflow_call:
-    inputs:
-      build_target:
-        required: true
-        type: string
-      ksu_fork:
-        required: true
-        type: string
-      manifest_name:
-        required: true
-        type: string
-      include_susfs:
-        required: true
-        type: boolean
-      include_bbg:
-        required: true
-        type: boolean
-      toolchain:
-        required: true
-        type: string
-    secrets:
-      TELEGRAM_TOKEN:
-        required: false
-      TELEGRAM_CHAT_ID:
-        required: false
-
-permissions:
-  contents: write
-
-jobs:
-  # =========================================================================
-  # JOB 1: BUILD KERNEL
-  # =========================================================================
+ # =========================================================================
+ # JOB 1: BUILD KERNEL
+ # =========================================================================
   build-kernel:
     if: inputs.build_target == 'both' || inputs.build_target == 'kernel_only'
     runs-on: ubuntu-latest
@@ -742,12 +395,14 @@ jobs:
           EOF
 
   # =========================================================================
-  # =========================================================================
   # JOB 2: BUILD MANAGER APP
   # =========================================================================
   build-manager:
     needs: build-kernel
-    if: inputs.build_target == 'both' || inputs.build_target == 'manager_only'
+    if: |
+      always() && !cancelled() && (
+        inputs.build_target == 'both' || inputs.build_target == 'manager_only'
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -784,11 +439,12 @@ jobs:
                   print("Telegram notification error:", e)
           EOF
 
-      - name: Setup Java JDK 21
+      - name: Setup Java JDK 21 & Gradle Cache
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
+          cache: 'gradle'
 
       - name: Clone Manager Source Code ("${{ inputs.ksu_fork }}")
         run: |
@@ -865,7 +521,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "❌ Kernel build gagal! Membatalkan seluruh workflow..."
+          echo "❌ Manager build gagal! Membatalkan seluruh workflow..."
           gh run cancel ${{ github.run_id }}
 
   # =========================================================================
@@ -893,35 +549,56 @@ jobs:
           path: release_assets
           merge-multiple: true
 
+      - name: Prepare Release Environment
+        run: |
+          DATE_TAG=$(date +'%Y%m%d-%H%M')
+          echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
+
+          # Ambil nama berkas ZIP kernel untuk judul rilis
+          ZIP_FILE=$(find release_assets -name "*.zip" | head -n 1)
+          if [ -n "$ZIP_FILE" ]; then
+            ZIP_NAME=$(basename "$ZIP_FILE")
+            echo "RELEASE_TITLE=LinuxxPU Kernel - $ZIP_NAME" >> $GITHUB_ENV
+          else
+            echo "RELEASE_TITLE=LinuxxPU Build Release v$DATE_TAG" >> $GITHUB_ENV
+          fi
+
+          # Ambil isi hash SHA256 jika berkasnya ada
+          SHA_FILE=$(find release_assets -name "*.sha256" | head -n 1)
+          if [ -n "$SHA_FILE" ]; then
+            echo "SHA256_CONTENT=$(cat "$SHA_FILE")" >> $GITHUB_ENV
+          else
+            echo "SHA256_CONTENT=N/A" >> $GITHUB_ENV
+          fi
+
       - name: Auto-Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.DATE_TAG }}
-          name: "LinuxxPU Kernel - ${{ env.ZIP_NAME }}"
+          name: "${{ env.RELEASE_TITLE }}"
           draft: false
           prerelease: false
           generate_release_notes: false
           body: |
-            ### 🚀 LinuxxPU Kernel Release
+            ### 🚀 LinuxxPU Build Release
             
-            * **Device**: Xiaomi Camellia (`camellia`)
+            * **Device / Manifest**: `${{ inputs.manifest_name }}`
             * **Kernel Version**: 4.14
             * **Toolchain**: `${{ inputs.toolchain }}`
             * **Build Date**: `${{ env.DATE_TAG }}`
 
             #### 🛠️ Included Features
-            * **KernelSU**: `${{ inputs.enable_ksu }}`
-            * **SUSFS**: `${{ inputs.enable_susfs }}`
-            * **BBG**: `${{ inputs.enable_bbg }}`
+            * **KernelSU Engine**: `${{ inputs.ksu_fork }}`
+            * **SUSFS**: `${{ inputs.include_susfs }}`
+            * **Baseband-Guard**: `${{ inputs.include_bbg }}`
 
             ---
-            *📦 File SHA256 Verification:*
+            *📦 File SHA256 Checksum:*
             ```text
-            ${{ env.ZIP_NAME }}.sha256
+            ${{ env.SHA256_CONTENT }}
             ```
           files: |
-            ${{ env.ZIP_PATH }}
-            ${{ env.SHA256_PATH }}
+            release_assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -942,12 +619,27 @@ jobs:
           ksu = os.environ.get("KSU", "")
 
           if token and chat_id:
-              # Kirim Kernel ZIP
+              # 1. Kirim File ZIP Kernel + Hash SHA256
               zips = glob.glob("release_assets/*.zip")
               for zip_file in zips:
                   name = os.path.basename(zip_file)
                   size = subprocess.check_output(["du", "-h", zip_file]).decode().split()[0]
-                  caption = f"⚡ *LinuxxPU Kernel Ready!*\n\n📱 *Device:* {manifest}\n⚙️ *KSU Fork:* {ksu}\n📦 *File:* `{name}`\n📊 *Size:* {size}"
+                  
+                  # Cari berkas SHA256 terkait
+                  sha_file = zip_file + ".sha256"
+                  sha_hash = "N/A"
+                  if os.path.exists(sha_file):
+                      with open(sha_file, "r") as f:
+                          sha_hash = f.read().strip().split()[0]
+
+                  caption = (
+                      f"⚡ *LinuxxPU Kernel Ready!*\n\n"
+                      f"📱 *Device:* {manifest}\n"
+                      f"⚙️ *KSU Engine:* {ksu}\n"
+                      f"📦 *File:* `{name}`\n"
+                      f"📊 *Size:* {size}\n"
+                      f"🔑 *SHA256:* `{sha_hash}`"
+                  )
                   cmd = [
                       "curl", "-s",
                       "-F", f"chat_id={chat_id}",
@@ -958,12 +650,17 @@ jobs:
                   ]
                   subprocess.run(cmd)
 
-              # Kirim Manager APK
+              # 2. Kirim Manager APK jika ada
               apks = glob.glob("release_assets/*.apk")
               for apk_file in apks:
                   name = os.path.basename(apk_file)
                   size = subprocess.check_output(["du", "-h", apk_file]).decode().split()[0]
-                  caption = f"📱 *LinuxxPU Manager App!*\n\n⚙️ *Fork:* {ksu}\n📦 *File:* `{name}`\n📊 *Size:* {size}"
+                  caption = (
+                      f"📱 *LinuxxPU Manager App!*\n\n"
+                      f"⚙️ *KSU Engine:* {ksu}\n"
+                      f"📦 *File:* `{name}`\n"
+                      f"📊 *Size:* {size}"
+                  )
                   cmd = [
                       "curl", "-s",
                       "-F", f"chat_id={chat_id}",
