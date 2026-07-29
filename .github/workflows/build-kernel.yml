@@ -309,28 +309,60 @@ jobs:
             CROSS_COMPILE_ARM32=arm-linux-androideabi- \
             LD=ld.lld
 
-      - name: Package AnyKernel3
+      - name: Package AnyKernel3 & Generate SHA256
         run: |
-          git clone https://github.com/osm0sis/AnyKernel3 AnyKernel3
-          
-          sed -i 's/device.name1=.*/device.name1=camellia/' AnyKernel3/anykernel.sh
-          sed -i 's/device.name2=.*/device.name2=camellian/' AnyKernel3/anykernel.sh
-          sed -i 's|block=.*|block=/dev/block/by-name/boot|' AnyKernel3/anykernel.sh
-          
-          if [ -f kernel-source/out/arch/arm64/boot/Image.gz-dtb ]; then
-            cp kernel-source/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
-          elif [ -f kernel-source/out/arch/arm64/boot/Image.gz ]; then
-            cp kernel-source/out/arch/arm64/boot/Image.gz AnyKernel3/
+          cd AnyKernel3
+
+          # 1. Salin hasil kompilasi Kernel ke folder AnyKernel3
+          if [ -f "../kernel-source/out/arch/arm64/boot/Image.gz-dtb" ]; then
+            cp ../kernel-source/out/arch/arm64/boot/Image.gz-dtb .
+          elif [ -f "../kernel-source/out/arch/arm64/boot/Image.gz" ]; then
+            cp ../kernel-source/out/arch/arm64/boot/Image.gz .
+          else
+            echo "❌ Error: File Image.gz / Image.gz-dtb tidak ditemukan!"
+            exit 1
           fi
 
-          cd AnyKernel3
-          zip -r9 ../LinuxxPU-${{ inputs.manifest_name }}-${{ inputs.ksu_fork }}.zip * -x .git README.md
+          # 2. Susun komponen nama dinamis
+          DATE_TAG=$(date +'%Y%m%d-%H%M')
+          KERNEL_NAME="LinuxxPU"
+          DEVICE="Camellia"
+          TOOLCHAIN="${{ inputs.toolchain }}"
 
-      - name: Upload Kernel Artifact
+          # Cek status fitur aktif
+          FEATURE_TAGS=""
+          [ "${{ inputs.enable_ksu }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-KSU"
+          [ "${{ inputs.enable_susfs }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-SUSFS"
+          [ "${{ inputs.enable_bbg }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-BBG"
+
+          # Contoh hasil: LinuxxPU-Camellia-4.14-zyc-clang-KSU-SUSFS-20260729-1130.zip
+          ZIP_NAME="${KERNEL_NAME}-${DEVICE}-4.14-${TOOLCHAIN}${FEATURE_TAGS}-${DATE_TAG}.zip"
+
+          # 3. Kompresi AnyKernel3 menjadi ZIP
+          zip -r9 "$ZIP_NAME" ./* -x ".git*" "README.md" "*.zip"
+
+          # 4. Buat file SHA256 Checksum
+          sha256sum "$ZIP_NAME" > "${ZIP_NAME}.sha256"
+
+          # 5. Tampilkan ringkasan di Log Runner
+          echo "=================================================="
+          echo "📦 Output Zip : $ZIP_NAME"
+          echo "🔑 SHA256 Hash: $(awk '{print $1}' "${ZIP_NAME}.sha256")"
+          echo "=================================================="
+
+          # 6. Ekspor variabel ke GITHUB_ENV agar bisa dipakai step upload / Telegram
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+          echo "ZIP_PATH=AnyKernel3/$ZIP_NAME" >> $GITHUB_ENV
+          echo "SHA256_PATH=AnyKernel3/${ZIP_NAME}.sha256" >> $GITHUB_ENV
+
+      - name: Upload Kernel Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: "LinuxxPU-${{ inputs.manifest_name }}-${{ inputs.ksu_fork }}"
-          path: "LinuxxPU-${{ inputs.manifest_name }}-${{ inputs.ksu_fork }}.zip"
+          name: ${{ env.ZIP_NAME }}
+          path: |
+            ${{ env.ZIP_PATH }}
+            ${{ env.SHA256_PATH }}
+          retention-days: 7
 
       - name: Send Telegram Failure Notification (Kernel)
         if: failure()
