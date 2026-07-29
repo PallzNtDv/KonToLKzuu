@@ -7,7 +7,7 @@ Personal repository to build customized kernel drivers and KernelSU managers for
 Fully automated CI/CD pipeline running on GitHub Actions for 4.14 Non-GKI Android kernels.
 
 ## Features
-- **KernelSU Multi-Fork**: Official KernelSU, xxKSU, and SUKISU.
+- **KernelSU Multi-Fork**: Official KernelSU,KernelSU-Next, xxKSU, and SUKISU.
 - **Kernel Enhancements**: Integrated SUSFS 4.14 & Baseband-Guard (BBG) support.
 - **Toolchain Support**: Proton-Clang and Official AOSP Clang.
 - **Userspace Tooling**: Auto cross-compilation for Rust `lpud` binaries (xxKSU / SUKISU).
