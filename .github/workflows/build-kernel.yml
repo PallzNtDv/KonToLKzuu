@@ -291,23 +291,52 @@ jobs:
           echo "CONFIG_IP_NF_TARGET_TTL=y" >> $DEFCONFIG_FILE
           echo "CONFIG_IP6_NF_TARGET_HL=y" >> $DEFCONFIG_FILE
 
+      - name: Setup & Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ runner.os }}-${{ inputs.toolchain }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ inputs.toolchain }}-
+            ccache-${{ runner.os }}-
+
+      - name: Configure ccache
+        run: |
+          sudo apt-get update && sudo apt-get install -y ccache
+          
+          # Konfigurasi ccache
+          export CCACHE_DIR=~/.cache/ccache
+          ccache -M 5G                      # Set batas maksimum cache ke 5GB
+          ccache -o compression=true         # Aktifkan kompresi agar hemat ruang
+          ccache -z                         # Reset statistik untuk running kali ini          
+
       - name: Build Kernel Image
         run: |
           cd kernel-source
 
-          # Remove the old Clang-bundled `ld` so that the host tool (`fixdep`) uses Ubuntu's system `ld`.
+          # Hapus ld tua bawaan Clang agar host tool (fixdep) menggunakan system ld milik Ubuntu
           rm -f $GITHUB_WORKSPACE/toolchain/clang/bin/ld
           
           export PATH=$GITHUB_WORKSPACE/toolchain/clang/bin:$GITHUB_WORKSPACE/toolchain/gcc64/bin:$GITHUB_WORKSPACE/toolchain/gcc32/bin:$PATH
+          export CCACHE_DIR=~/.cache/ccache
           
+          # Build defconfig
           make O=out ARCH=${{ env.ARCH }} $KERNEL_DEFCONFIG
+          
+          # Build Kernel Image dengan ccache
           make -j$(nproc --all) O=out \
             ARCH=${{ env.ARCH }} \
-            CC=clang \
+            CC="ccache clang" \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-android- \
             CROSS_COMPILE_ARM32=arm-linux-androideabi- \
             LD=ld.lld
+
+          # Tampilkan statistik cache di log runner
+          echo "=================================================="
+          echo "📊 CCACHE STATS"
+          echo "=================================================="
+          ccache -s
 
       - name: Package AnyKernel3 & Generate SHA256
         run: |
