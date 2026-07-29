@@ -495,30 +495,39 @@ jobs:
                   print("Telegram notification error:", e)
           EOF
 
-      # 🎯 1. CLONE SOURCE CODE MANAGER TERLEBIH DAHULU
+      # 🎯 CLONE SOURCE CODE MANAGER DENGAN CLEAN FALLBACK
       - name: Clone Manager Source Code ("${{ inputs.ksu_fork }}")
         run: |
-          rm -rf manager-src
-          
+          clone_repo() {
+            local url=$1
+            rm -rf manager-src
+            echo "📥 Attempting to clone: $url"
+            git clone --depth=1 "$url" manager-src 2>/dev/null
+          }
+
           if [ "${{ inputs.ksu_fork }}" = "xxKSU" ]; then
-            echo "Cloning xxKSU Manager with fallback..."
-            git clone --depth=1 https://github.com/backslashxx/KernelSU.git manager-src || \
-            git clone --depth=1 https://github.com/rifs28/KernelSU-Next.git manager-src || \
-            git clone --depth=1 https://github.com/tiann/KernelSU.git manager-src
+            echo "Cloning xxKSU Manager..."
+            clone_repo "https://github.com/rifs28/KernelSU-Next.git" || \
+            clone_repo "https://github.com/tiann/KernelSU.git"
           elif [ "${{ inputs.ksu_fork }}" = "SUKISU" ]; then
-            echo "Cloning SUKISU Manager with fallback..."
-            git clone --depth=1 https://github.com/SukiSU-Ultra/SukiSU-Manager.git manager-src || \
-            git clone --depth=1 https://github.com/SukiSU-Ultra/SukiSU-Ultra.git manager-src || \
-            git clone --depth=1 https://github.com/tiann/KernelSU.git manager-src
+            echo "Cloning SUKISU Manager..."
+            clone_repo "https://github.com/SukiSU-Ultra/SukiSU-Manager.git" || \
+            clone_repo "https://github.com/SukiSU-Ultra/SukiSU-Ultra.git" || \
+            clone_repo "https://github.com/tiann/KernelSU.git"
+          elif [ "${{ inputs.ksu_fork }}" = "KSU-Next" ]; then
+            echo "Cloning KernelSU-Next Manager..."
+            clone_repo "https://github.com/rifs28/KernelSU-Next.git" || \
+            clone_repo "https://github.com/tiann/KernelSU.git"
           else
             echo "Cloning Official KernelSU Manager..."
-            git clone --depth=1 https://github.com/tiann/KernelSU.git manager-src
+            clone_repo "https://github.com/tiann/KernelSU.git"
           fi
 
-          if [ ! -d "manager-src" ]; then
-            echo "❌ Error: Failed to clone Manager repository!"
+          if [ ! -d "manager-src" ] || [ ! -f "manager-src/gradlew" ]; then
+            echo "❌ Error: Failed to clone a valid Manager repository!"
             exit 1
           fi
+          echo "✅ Manager repository successfully cloned!"
 
       # 🎯 2. SETUP JAVA DAN GRADLE CACHE (Setel Path ke manager-src)
       - name: Setup Java JDK 21 & Gradle Cache
