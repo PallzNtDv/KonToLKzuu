@@ -495,14 +495,14 @@ jobs:
                   print("Telegram notification error:", e)
           EOF
 
-      # 🎯 CLONE SOURCE CODE MANAGER DENGAN CLEAN FALLBACK
+      # 🎯 CLONE SOURCE CODE MANAGER DENGAN PENGECEKAN LOKASI GRADLEW
       - name: Clone Manager Source Code ("${{ inputs.ksu_fork }}")
         run: |
           clone_repo() {
             local url=$1
             rm -rf manager-src
             echo "📥 Attempting to clone: $url"
-            git clone --depth=1 "$url" manager-src 2>/dev/null
+            git clone --depth=1 --recurse-submodules "$url" manager-src
           }
 
           if [ "${{ inputs.ksu_fork }}" = "xxKSU" ]; then
@@ -523,11 +523,15 @@ jobs:
             clone_repo "https://github.com/tiann/KernelSU.git"
           fi
 
-          if [ ! -d "manager-src" ] || [ ! -f "manager-src/gradlew" ]; then
-            echo "❌ Error: Failed to clone a valid Manager repository!"
+          # Cari berkas gradlew hingga kedalaman 3 sub-folder
+          GW_FILE=$(find manager-src -maxdepth 3 -name "gradlew" 2>/dev/null | head -n 1)
+
+          if [ ! -d "manager-src" ] || [ -z "$GW_FILE" ]; then
+            echo "❌ Error: Failed to clone a valid Manager repository or gradlew missing!"
             exit 1
           fi
-          echo "✅ Manager repository successfully cloned!"
+
+          echo "✅ Manager repository successfully cloned! (gradlew found at: $GW_FILE)"
 
       # 🎯 2. SETUP JAVA DAN GRADLE CACHE (Setel Path ke manager-src)
       - name: Setup Java JDK 21 & Gradle Cache
