@@ -267,6 +267,18 @@ jobs:
           echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> $DEFCONFIG_FILE
           echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> $DEFCONFIG_FILE
 
+      # 🎯 MODULAR FEATURE INJECTION WITH TOGGLE
+      - name: Inject Selected Kernel Features
+        uses: ./.github/actions/inject-features
+        with:
+          defconfig: ${{ env.KERNEL_DEFCONFIG }}
+          enable_lto_o3: ${{ inputs.include_lto_o3 }}
+          enable_wireguard: ${{ inputs.include_wireguard }}
+          enable_f2fs: ${{ inputs.include_f2fs }}
+          enable_zstd: ${{ inputs.include_zstd }}
+          enable_bbr: ${{ inputs.include_bbr }}
+          enable_ttl: ${{ inputs.include_ttl }}
+
       - name: Configure Kernel Defconfig
         run: |
           cd kernel-source
@@ -333,7 +345,7 @@ jobs:
           elif [ -f "../kernel-source/out/arch/arm64/boot/Image.gz" ]; then
             cp ../kernel-source/out/arch/arm64/boot/Image.gz .
           else
-            echo "❌ Error: File Image.gz / Image.gz-dtb tidak ditemukan!"
+            echo "❌ Error: File Image.gz / Image.gz-dtb not found!"
             exit 1
           fi
 
@@ -447,7 +459,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "❌ Manager build gagal! Membatalkan seluruh workflow..."
+          echo "❌ Build manager failed! Canceling the entire workflow...."
           gh run cancel ${{ github.run_id }}
 
   # =========================================================================
@@ -495,7 +507,7 @@ jobs:
                   print("Telegram notification error:", e)
           EOF
 
-      # 🎯 CLONE SOURCE CODE MANAGER DENGAN PENGECEKAN LOKASI GRADLEW
+      # 🎯 CLONE SOURCE CODE MANAGER WITH GRADLEW LOCATION CHECKING
       - name: Clone Manager Source Code ("${{ inputs.ksu_fork }}")
         run: |
           clone_repo() {
@@ -523,7 +535,7 @@ jobs:
             clone_repo "https://github.com/tiann/KernelSU.git"
           fi
 
-          # Cari berkas gradlew hingga kedalaman 3 sub-folder
+          # Search for gradlew files up to 3 sub-folders deep
           GW_FILE=$(find manager-src -maxdepth 3 -name "gradlew" 2>/dev/null | head -n 1)
 
           if [ ! -d "manager-src" ] || [ -z "$GW_FILE" ]; then
