@@ -489,7 +489,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 🎯 Kloning HARUS berjalan tanpa syarat 'if' di step ini!
       - name: Clone Manager Source Code ("${{ inputs.ksu_fork }}")
         run: |
           clone_repo() {
@@ -526,7 +525,6 @@ jobs:
 
           echo "✅ Manager repository successfully cloned!"
 
-      # 🎯 2. SETUP JAVA DAN GRADLE CACHE (Setel Path ke manager-src)
       - name: Setup Java JDK 21 & Gradle Cache
         uses: actions/setup-java@v4
         with:
@@ -537,13 +535,14 @@ jobs:
 
       - name: Build Manager APK via Gradle
         run: |
-          GRADLE_DIR=$(find manager-src -maxdepth 3 -name "gradlew" -exec dirname {} \;)
+          GW_FILE=$(find manager-src -maxdepth 3 -name "gradlew" 2>/dev/null | head -n 1)
 
-          if [ -z "$GRADLE_DIR" ]; then
+          if [ -z "$GW_FILE" ]; then
             echo "❌ Error: gradlew file not found in manager-src!"
             exit 1
           fi
 
+          GRADLE_DIR=$(dirname "$GW_FILE")
           echo "✅ Gradle project location found at: $GRADLE_DIR"
           cd "$GRADLE_DIR"
           chmod +x gradlew
@@ -553,13 +552,11 @@ jobs:
         run: |
           mkdir -p output_apk
 
-          # 1. Check if manager-src directory exists
           if [ ! -d "manager-src" ]; then
             echo "❌ Error: Directory 'manager-src' not found! Previous clone step might have failed."
             exit 1
           fi
 
-          # 2. Search for the release APK file
           APK_FILE=$(find manager-src -name "*.apk" | grep -i "release" | head -n 1)
 
           if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
@@ -569,7 +566,7 @@ jobs:
             echo "❌ Error: Compiled APK file not found!"
             exit 1
           fi
-          
+
       - name: Upload Manager APK Artifact
         uses: actions/upload-artifact@v4
         with:
