@@ -553,20 +553,20 @@ jobs:
         run: |
           mkdir -p output_apk
 
-          # 1. Cek keberadaan folder manager-src terlebih dahulu
+          # 1. Check if manager-src directory exists
           if [ ! -d "manager-src" ]; then
-            echo "❌ Error: Folder manager-src tidak ditemukan! Proses kloning sebelumnya kemungkinan gagal."
+            echo "❌ Error: Directory 'manager-src' not found! Previous clone step might have failed."
             exit 1
           fi
 
-          # 2. Cari file APK release
+          # 2. Search for the release APK file
           APK_FILE=$(find manager-src -name "*.apk" | grep -i "release" | head -n 1)
 
           if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
-            echo "✅ APK found in: $APK_FILE"
+            echo "✅ APK found at: $APK_FILE"
             cp "$APK_FILE" "output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk"
           else
-            echo "❌ Error: File APK hasil kompilasi tidak ditemukan!"
+            echo "❌ Error: Compiled APK file not found!"
             exit 1
           fi
           
