@@ -505,15 +505,25 @@ jobs:
       - name: Clone Manager Source Code ("${{ inputs.ksu_fork }}")
         run: |
           rm -rf manager-src
+          
           if [ "${{ inputs.ksu_fork }}" = "xxKSU" ]; then
-            echo "Cloning xxKSU Manager..."
-            git clone --depth=1 https://github.com/backslashxx/KernelSU.git manager-src
+            echo "Cloning xxKSU Manager with fallback..."
+            git clone --depth=1 https://github.com/backslashxx/KernelSU.git manager-src || \
+            git clone --depth=1 https://github.com/rifs28/KernelSU-Next.git manager-src || \
+            git clone --depth=1 https://github.com/tiann/KernelSU.git manager-src
           elif [ "${{ inputs.ksu_fork }}" = "SUKISU" ]; then
-            echo "Cloning SUKISU Manager..."
-            git clone --depth=1 https://github.com/SukiSU-Ultra/SukiSU-Manager.git manager-src || git clone --depth=1 https://github.com/SukiSU-Ultra/SukiSU-Ultra.git manager-src
+            echo "Cloning SUKISU Manager with fallback..."
+            git clone --depth=1 https://github.com/SukiSU-Ultra/SukiSU-Manager.git manager-src || \
+            git clone --depth=1 https://github.com/SukiSU-Ultra/SukiSU-Ultra.git manager-src || \
+            git clone --depth=1 https://github.com/tiann/KernelSU.git manager-src
           else
             echo "Cloning Official KernelSU Manager..."
             git clone --depth=1 https://github.com/tiann/KernelSU.git manager-src
+          fi
+
+          if [ ! -d "manager-src" ]; then
+            echo "❌ Error: Failed to clone Manager repository!"
+            exit 1
           fi
 
       - name: Build Manager APK via Gradle
@@ -521,11 +531,11 @@ jobs:
           GRADLE_DIR=$(find manager-src -maxdepth 3 -name "gradlew" -exec dirname {} \;)
 
           if [ -z "$GRADLE_DIR" ]; then
-            echo "Error: File gradlew tidak ditemukan!"
+            echo "❌ Error: gradlew file not found in manager-src!"
             exit 1
           fi
 
-          echo "Lokasi Gradle project ditemukan di: $GRADLE_DIR"
+          echo "✅ Gradle project location found at: $GRADLE_DIR"
           cd "$GRADLE_DIR"
           chmod +x gradlew
           ./gradlew :app:assembleRelease --no-daemon
@@ -533,20 +543,26 @@ jobs:
       - name: Organize APK Artifact
         run: |
           mkdir -p output_apk
+
+          if [ ! -d "manager-src" ]; then
+            echo "❌ Error: manager-src directory does not exist!"
+            exit 1
+          fi
+
           APK_FILE=$(find manager-src -name "*.apk" | grep -i "release" | head -n 1)
 
           if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
-            echo "APK ditemukan di: $APK_FILE"
+            echo "✅ APK found at: $APK_FILE"
             cp "$APK_FILE" "output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk"
           else
-            echo "Error: File APK hasil kompilasi tidak ditemukan!"
+            echo "❌ Error: Compiled APK file not found!"
             exit 1
           fi
 
       - name: Upload Manager APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: "${{ inputs.ksu_fork }}-Manager-APK"
+          name: manager-assets
           path: "output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk"
 
       - name: Send Telegram Failure Notification (Manager)
@@ -563,7 +579,7 @@ jobs:
           ksu = os.environ.get("KSU", "")
 
           if token and chat_id:
-              text = f"❌ *Build Manager Failed!*\n⚙️ *Fork:* {ksu}"
+              text = f"❌ *Manager Build Failed!*\n⚙️ *Fork:* {ksu}"
               data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode()
               req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
               try:
@@ -577,7 +593,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "❌ Manager build gagal! Membatalkan seluruh workflow..."
+          echo "❌ Manager build failed! Cancelling entire workflow..."
           gh run cancel ${{ github.run_id }}
 
   # =========================================================================
