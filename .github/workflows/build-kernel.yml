@@ -51,6 +51,29 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # --- Telegram Build Start Notification ---
+      - name: Send Telegram Start Notification
+        run: |
+          MESSAGE="⚡ *LinuxxPU Build Engine Initialized*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📱 *Device Target:* \`${{ inputs.manifest_name }}\`
+🎯 *Build Target:* \`${{ inputs.build_target }}\`
+🔑 *KSU Engine:* \`${{ inputs.ksu_fork }}\`
+🛠️ *Toolchain:* \`${{ inputs.toolchain }}\`
+🛡️ *SUSFS & BBG:* \`${{ inputs.include_extra_features }}\`
+🔢 *Build Run:* \`#${{ github.run_number }}\`
+━━━━━━━━━━━━━━━━━━━━━━━━━
+⚙️ *Status:* \`Compiling source code...\`
+
+🔗 [View Live Workflow Log](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "parse_mode=Markdown" \
+            -d "disable_web_page_preview=true" \
+            --data-urlencode "text=${MESSAGE}"
+
       - name: Setup Build Dependencies
         run: |
           sudo apt purge -y man-db /var/lib/man-db/auto-update || true
@@ -222,7 +245,7 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
             -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d "parse_mode=Markdown" \
-            -d "text=❌ *Build Kernel Gagal!*%0A📱 *Device:* ${{ inputs.manifest_name }}%0A⚙️ *Fork:* ${{ inputs.ksu_fork }}"
+            -d "text=❌ *Build Kernel Failed!*%0A📱 *Device:* ${{ inputs.manifest_name }}%0A⚙️ *Fork:* ${{ inputs.ksu_fork }}"
 
   # =========================================================================
   # JOB 2: BUILD MANAGER APP
@@ -235,6 +258,28 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      # --- Telegram Build Start Notification (Hanya jika memilih manager_only) ---
+      - name: Send Telegram Start Notification (Manager Only)
+        if: inputs.build_target == 'manager_only'
+        run: |
+          MESSAGE="⚡ *LinuxxPU Build Engine Initialized*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+📱 *Device Target:* \`${{ inputs.manifest_name }}\`
+🎯 *Build Target:* \`${{ inputs.build_target }}\`
+🔑 *KSU Engine:* \`${{ inputs.ksu_fork }}\`
+🔢 *Build Run:* \`#${{ github.run_number }}\`
+━━━━━━━━━━━━━━━━━━━━━━━━━
+⚙️ *Status:* \`Compiling Manager APK...\`
+
+🔗 [View Live Workflow Log](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "parse_mode=Markdown" \
+            -d "disable_web_page_preview=true" \
+            --data-urlencode "text=${MESSAGE}"
 
       - name: Setup Java JDK 21
         uses: actions/setup-java@v4
@@ -295,7 +340,7 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
             -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d "parse_mode=Markdown" \
-            -d "text=❌ *Build Manager Gagal!*%0A⚙️ *Fork:* ${{ inputs.ksu_fork }}"
+            -d "text=❌ *Build Manager Failed!*%0A⚙️ *Fork:* ${{ inputs.ksu_fork }}"
 
   # =========================================================================
   # JOB 3: PUBLISH TO GITHUB RELEASES & TELEGRAM
@@ -370,4 +415,3 @@ jobs:
                  -F parse_mode="Markdown" \
                  "https://api.telegram.org/bot${TOKEN}/sendDocument"
           fi
-          
