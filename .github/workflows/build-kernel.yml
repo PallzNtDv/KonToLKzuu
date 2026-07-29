@@ -193,6 +193,22 @@ jobs:
             sed -i 's/#ifdef CONFIG_KPROBES/#if 0/g' "$HOOK_FILE"
           fi
 
+      - name: Apply Manual Hooks for Official KSU (4.14 Non-GKI)
+        if: inputs.ksu_fork == 'Official'
+        run: |
+          cd kernel-source
+          echo "Applying Manual Hooks for Official KSU on 4.14..."
+          
+          # Inject KSU ke drivers/Makefile dan drivers/Kconfig jika belum ada
+          grep -q "kernelsu" drivers/Makefile || echo "obj-y += kernelsu/" >> drivers/Makefile
+          grep -q "kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+          
+          # Patch manual hooks ke fs/open.c, fs/read_write.c, fs/stat.c, fs/exec.c
+          # (Pastikan kamu memiliki file patch manual_hooks.patch di repo kamu)
+          if [ -f "../patches/ksu_manual_hooks_4.14.patch" ]; then
+            patch -p1 < ../patches/ksu_manual_hooks_4.14.patch
+          fi
+          
       - name: Apply Baseband-Guard (BBG)
         if: inputs.include_extra_features == true
         run: |
