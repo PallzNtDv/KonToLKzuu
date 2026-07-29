@@ -29,10 +29,11 @@ on:
 
 permissions:
   contents: write
+
 jobs:
- # =========================================================================
- # JOB 1: BUILD KERNEL
- # =========================================================================
+  # =========================================================================
+  # JOB 1: BUILD KERNEL
+  # =========================================================================
   build-kernel:
     if: inputs.build_target == 'both' || inputs.build_target == 'kernel_only'
     runs-on: ubuntu-latest
@@ -84,7 +85,7 @@ jobs:
           run_num = os.environ.get("RUN_NUM", "")
 
           if token and chat_id:
-              text = f"⚡ *LinuxxPU Build Engine Initialized*\n\n📱 *Device:* {manifest}\n🎯 *Target:* {target}\n🔑 *KSU Engine:* {ksu}\n🛠️ *Toolchain:* {toolchain}\n🛡️ *SUSFS:* {susfs}\n🔰 *Baseband-Guard:* {bbg}\n🔢 *Build Run:* #{run_num}\n\n⚙️ *Status:* Compiling source code..."
+              text = f"⚡ *LinuxxPU Build Engine Initialized*\n\n📱 *Device:* {manifest}\n🎯 *Target:* {target}\n🔑 *KSU Engine:* {ksu}\n🛠️ *Toolchain:* {toolchain}\n🛡️ *SUSFS:* {susfs}\n🔰 *Baseband-Guard:* {bbg}\n🔢 *Build Run:* #{run_num}\n\n⚙️ *Status:* Compiling kernel source..."
               data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode()
               req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
               try:
@@ -140,7 +141,7 @@ jobs:
               fi
 
               if [ "$SUCCESS" = false ]; then
-                echo "⚠️ ZyC Clang gagal/terblokir. Fallback ke Official AOSP Clang..."
+                echo "⚠️ ZyC Clang gagal/terblokir. Fallback otomatis ke Official AOSP Clang..."
                 rm -rf clang zyc-clang.archive
                 wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android11-release/clang-r383902.tar.gz
                 mkdir clang && tar -xf clang-r383902.tar.gz -C clang
@@ -363,7 +364,7 @@ jobs:
       - name: Upload Kernel Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ZIP_NAME }}
+          name: kernel-assets
           path: |
             ${{ env.ZIP_PATH }}
             ${{ env.SHA256_PATH }}
@@ -393,6 +394,61 @@ jobs:
               except Exception as e:
                   print("Telegram notification error:", e)
           EOF
+
+          echo "Lokasi Gradle project ditemukan di: $GRADLE_DIR"
+          cd "$GRADLE_DIR"
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Organize APK Artifact
+        run: |
+          mkdir -p output_apk
+          APK_FILE=$(find manager-src -name "*.apk" | grep -i "release" | head -n 1)
+
+          if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
+            echo "APK ditemukan di: $APK_FILE"
+            cp "$APK_FILE" "output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk"
+          else
+            echo "Error: File APK hasil kompilasi tidak ditemukan!"
+            exit 1
+          fi
+
+      - name: Upload Manager APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ inputs.ksu_fork }}-Manager-APK"
+          path: "output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk"
+
+      - name: Send Telegram Failure Notification (Manager)
+        if: failure()
+        env:
+          TELEGRAM_TOKEN: "${{ secrets.TELEGRAM_TOKEN }}"
+          TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
+          KSU: "${{ inputs.ksu_fork }}"
+        run: |
+          python3 << 'EOF'
+          import os, urllib.request, urllib.parse
+          token = os.environ.get("TELEGRAM_TOKEN")
+          chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+          ksu = os.environ.get("KSU", "")
+
+          if token and chat_id:
+              text = f"❌ *Build Manager Failed!*\n⚙️ *Fork:* {ksu}"
+              data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode()
+              req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
+              try:
+                  urllib.request.urlopen(req)
+              except Exception as e:
+                  print("Telegram notification error:", e)
+          EOF
+
+      - name: Cancel Entire Workflow on Failure
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "❌ Manager build gagal! Membatalkan seluruh workflow..."
+          gh run cancel ${{ github.run_id }}
 
   # =========================================================================
   # JOB 2: BUILD MANAGER APP
