@@ -53,23 +53,37 @@ jobs:
 
       # --- Telegram Build Start Notification ---
       - name: Send Telegram Start Notification
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MANIFEST_NAME: ${{ inputs.manifest_name }}
+          BUILD_TARGET: ${{ inputs.build_target }}
+          KSU_FORK: ${{ inputs.ksu_fork }}
+          TOOLCHAIN: ${{ inputs.toolchain }}
+          EXTRA_FEATURES: ${{ inputs.include_extra_features }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ID: ${{ github.run_id }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          MESSAGE="⚡ *LinuxxPU Build Engine Initialized*
+          MESSAGE=$(cat << EOF
+          ⚡ *LinuxxPU Build Engine Initialized*
 
           ━━━━━━━━━━━━━━━━━━━━━━━━━
-          📱 *Device Target:* \`${{ inputs.manifest_name }}\`
-          🎯 *Build Target:* \`${{ inputs.build_target }}\`
-          🔑 *KSU Engine:* \`${{ inputs.ksu_fork }}\`
-          🛠️ *Toolchain:* \`${{ inputs.toolchain }}\`
-          🛡️ *SUSFS & BBG:* \`${{ inputs.include_extra_features }}\`
-          🔢 *Build Run:* \`#${{ github.run_number }}\`
+          📱 *Device Target:* \`$MANIFEST_NAME\`
+          🎯 *Build Target:* \`$BUILD_TARGET\`
+          🔑 *KSU Engine:* \`$KSU_FORK\`
+          🛠️ *Toolchain:* \`$TOOLCHAIN\`
+          🛡️ *SUSFS & BBG:* \`$EXTRA_FEATURES\`
+          🔢 *Build Run:* \`#$RUN_NUMBER\`
           ━━━━━━━━━━━━━━━━━━━━━━━━━
           ⚙️ *Status:* \`Compiling source code...\`
 
-          🔗 [View Live Workflow Log](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          🔗 [View Live Workflow Log](https://github.com/$REPOSITORY/actions/runs/$RUN_ID)
+          EOF
+          )
 
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
-            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
             -d "parse_mode=Markdown" \
             -d "disable_web_page_preview=true" \
             --data-urlencode "text=${MESSAGE}"
@@ -261,21 +275,33 @@ jobs:
       # --- Telegram Build Start Notification (Manager Only) ---
       - name: Send Telegram Start Notification (Manager Only)
         if: inputs.build_target == 'manager_only'
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MANIFEST_NAME: ${{ inputs.manifest_name }}
+          BUILD_TARGET: ${{ inputs.build_target }}
+          KSU_FORK: ${{ inputs.ksu_fork }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ID: ${{ github.run_id }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          MESSAGE="⚡ *LinuxxPU Build Engine Initialized*
+          MESSAGE=$(cat << EOF
+          ⚡ *LinuxxPU Build Engine Initialized*
 
           ━━━━━━━━━━━━━━━━━━━━━━━━━
-          📱 *Device Target:* \`${{ inputs.manifest_name }}\`
-          🎯 *Build Target:* \`${{ inputs.build_target }}\`
-          🔑 *KSU Engine:* \`${{ inputs.ksu_fork }}\`
-          🔢 *Build Run:* \`#${{ github.run_number }}\`
+          📱 *Device Target:* \`$MANIFEST_NAME\`
+          🎯 *Build Target:* \`$BUILD_TARGET\`
+          🔑 *KSU Engine:* \`$KSU_FORK\`
+          🔢 *Build Run:* \`#$RUN_NUMBER\`
           ━━━━━━━━━━━━━━━━━━━━━━━━━
           ⚙️ *Status:* \`Compiling Manager APK...\`
 
-          🔗 [View Live Workflow Log](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          🔗 [View Live Workflow Log](https://github.com/$REPOSITORY/actions/runs/$RUN_ID)
+          EOF
+          )
 
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
-            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
             -d "parse_mode=Markdown" \
             -d "disable_web_page_preview=true" \
             --data-urlencode "text=${MESSAGE}"
