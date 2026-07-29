@@ -112,8 +112,21 @@ jobs:
               ;;
             "zyc-clang")
               echo "Downloading ZyC Clang..."
-              # ZyC Clang dari GitLab (sangat stabil untuk kernel 4.14 / 4.19)
-              URL=$(curl -s https://gitlab.com/api/v4/projects/28003182/releases | grep -oP '"url":\s*"\K[^"]*Clang-[^"]*\.tar\.gz' | head -n 1)
+              # Ambil URL release dari GitLab API dengan regex yang lebih fleksibel
+              URL=$(curl -sL -H "User-Agent: Mozilla/5.0" "https://gitlab.com/api/v4/projects/28003182/releases" | grep -oP 'https://[^\s"]+Clang[^\s"]*\.tar\.(gz|xz)' | head -n 1)
+
+              if [ -z "$URL" ]; then
+                echo "⚠️ Gagal mengambil URL via API! Mencoba fallback scraping halaman release..."
+                URL=$(curl -sL "https://gitlab.com/zycke/ZyC-Clang/-/releases" | grep -oP '/zycke/ZyC-Clang/-/uploads/[^\s"]+\.tar\.(gz|xz)' | head -n 1)
+                [ -n "$URL" ] && URL="https://gitlab.com${URL}"
+              fi
+
+              if [ -z "$URL" ]; then
+                echo "❌ Error: Tidak dapat menemukan link download ZyC Clang!"
+                exit 1
+              fi
+
+              echo "🔗 Downloading from: $URL"
               wget -q "$URL" -O zyc-clang.tar.gz
               mkdir clang && tar -xf zyc-clang.tar.gz -C clang
               ;;
