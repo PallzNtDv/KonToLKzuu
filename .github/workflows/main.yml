@@ -20,6 +20,7 @@ on:
         options:
           - 'xxKSU'
           - 'SUKISU'
+          - 'KSU-Next'
           - 'Official'
       manifest_name:
         description: 'Nama File Manifest (tanpa .xml)'
