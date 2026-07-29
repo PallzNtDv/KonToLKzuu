@@ -201,15 +201,20 @@ jobs:
           export PATH=~/.bin:$PATH
 
           SEARCH_TARGET="${{ inputs.manifest_name }}.xml"
-          FOUND_FILE=$(find "$GITHUB_WORKSPACE" -maxdepth 4 -iname "$SEARCH_TARGET" | head -n 1)
+          # Mencari file tanpa membatasi maxdepth agar ketemu meski di subfolder dalam
+          FOUND_FILE=$(find "$GITHUB_WORKSPACE" -type f -iname "$SEARCH_TARGET" -not -path "*/.git/*" | head -n 1)
 
           if [ -z "$FOUND_FILE" ] || [ ! -f "$FOUND_FILE" ]; then
-            echo "::error::File $SEARCH_TARGET NOT FOUND in repository!"
+            echo "::error::File $SEARCH_TARGET TIDAK DITEMUKAN di repositori!"
+            echo "--------------------------------------------------"
+            echo "🔍 Daftar file .xml yang ada di repositori kamu:"
+            find "$GITHUB_WORKSPACE" -type f -name "*.xml" -not -path "*/.git/*"
+            echo "--------------------------------------------------"
             exit 1
           fi
 
           MANIFEST_PATH="$FOUND_FILE"
-          echo "✅ Using manifest from: $MANIFEST_PATH"
+          echo "✅ Menggunakan manifest dari: $MANIFEST_PATH"
 
           mkdir -p local-manifest
           cp "$MANIFEST_PATH" local-manifest/default.xml
