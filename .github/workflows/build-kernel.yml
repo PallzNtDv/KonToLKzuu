@@ -200,15 +200,25 @@ jobs:
           chmod a+rx ~/.bin/repo
           export PATH=~/.bin:$PATH
 
-          SEARCH_TARGET="${{ inputs.manifest_name }}.xml"
-          # Mencari file tanpa membatasi maxdepth agar ketemu meski di subfolder dalam
-          FOUND_FILE=$(find "$GITHUB_WORKSPACE" -type f -iname "$SEARCH_TARGET" -not -path "*/.git/*" | head -n 1)
+          TARGET_NAME="${{ inputs.manifest_name }}.xml"
+          
+          # Prioritas 1: Cari langsung di folder .github/manifest/ atau manifests/
+          if [ -f "$GITHUB_WORKSPACE/.github/manifest/$TARGET_NAME" ]; then
+            FOUND_FILE="$GITHUB_WORKSPACE/.github/manifest/$TARGET_NAME"
+          elif [ -f "$GITHUB_WORKSPACE/manifests/$TARGET_NAME" ]; then
+            FOUND_FILE="$GITHUB_WORKSPACE/manifests/$TARGET_NAME"
+          else
+            # Prioritas 2: Cari di seluruh repositori (mengabaikan .git)
+            FOUND_FILE=$(find "$GITHUB_WORKSPACE" -type f -iname "$TARGET_NAME" -not -path "*/.git/*" -not -path "*/toolchain/*" | head -n 1)
+          fi
 
           if [ -z "$FOUND_FILE" ] || [ ! -f "$FOUND_FILE" ]; then
-            echo "::error::File $SEARCH_TARGET TIDAK DITEMUKAN di repositori!"
+            echo "::error::File $TARGET_NAME TIDAK DITEMUKAN di repositori!"
             echo "--------------------------------------------------"
-            echo "🔍 Daftar file .xml yang ada di repositori kamu:"
-            find "$GITHUB_WORKSPACE" -type f -name "*.xml" -not -path "*/.git/*"
+            echo "🔍 Struktur folder repositori saat ini:"
+            ls -la $GITHUB_WORKSPACE
+            ls -la $GITHUB_WORKSPACE/.github/ 2>/dev/null || true
+            ls -la $GITHUB_WORKSPACE/.github/manifest/ 2>/dev/null || true
             echo "--------------------------------------------------"
             exit 1
           fi
