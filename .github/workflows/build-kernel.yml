@@ -435,6 +435,14 @@ jobs:
                   print("Telegram notification error:", e)
           EOF
 
+      - name: Cancel Entire Workflow on Failure
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "❌ Kernel build gagal! Membatalkan seluruh workflow..."
+          gh run cancel ${{ github.run_id }}
+
   # =========================================================================
   # JOB 3: PUBLISH TO GITHUB RELEASES & TELEGRAM
   # =========================================================================
