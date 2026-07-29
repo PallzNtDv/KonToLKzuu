@@ -354,7 +354,17 @@ jobs:
           DEVICE="Camellia"
           TOOLCHAIN="${{ inputs.toolchain }}"
 
+                    # Dynamic Feature Tag Generator for File Output Name
           FEATURE_TAGS=""
+          [ -n "${{ inputs.ksu_fork }}" ] && FEATURE_TAGS="${FEATURE_TAGS}-${{ inputs.ksu_fork }}"
+          [ "${{ inputs.include_susfs }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-SUSFS"
+          [ "${{ inputs.include_bbg }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-BBG"
+          [ "${{ inputs.include_lto_o3 }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-LTO"
+          [ "${{ inputs.include_wireguard }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-WG"
+          [ "${{ inputs.include_f2fs }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-F2FS"
+          [ "${{ inputs.include_zstd }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-ZSTD"
+          [ "${{ inputs.include_bbr }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-BBR"
+          [ "${{ inputs.include_ttl }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-TTL"
           [ -n "${{ inputs.ksu_fork }}" ] && FEATURE_TAGS="${FEATURE_TAGS}-${{ inputs.ksu_fork }}"
           [ "${{ inputs.include_susfs }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-SUSFS"
           [ "${{ inputs.include_bbg }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-BBG"
