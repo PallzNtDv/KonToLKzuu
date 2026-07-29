@@ -23,10 +23,14 @@ on:
           - 'KSU-Next'
           - 'Official'
       manifest_name:
-        description: 'Nama File Manifest (tanpa .xml)'
+        description: 'Pilih Manifest XML Device'
         required: true
-        type: string
-        default: 'camellia'
+        type: choice
+        options:
+          - camellia
+          - flyme-test
+          - vortex-v1
+          - lineage-23.2
       include_susfs:
         description: 'Sertakan SUSFS (Kernel Anti-Detection)'
         required: true
