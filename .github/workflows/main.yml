@@ -39,6 +39,9 @@ on:
         options:
           - 'proton-clang'
           - 'aosp-clang'
+          - 'zyc-clang'
+          - 'azure-clang'
+          - 'eva-gcc'
 
 permissions:
   contents: write
@@ -67,4 +70,3 @@ jobs:
       ksu_fork: ${{ inputs.ksu_fork }}
       target_arch: 'aarch64-linux-android'
     secrets: inherit
-    
