@@ -203,24 +203,27 @@ jobs:
           chmod a+rx ~/.bin/repo
           export PATH=~/.bin:$PATH
 
-          TARGET_NAME="${{ inputs.manifest_name }}.xml"
-          
-          # Prioritas pencarian presisi
-          if [ -f "$GITHUB_WORKSPACE/.github/manifest/$TARGET_NAME" ]; then
-            FOUND_FILE="$GITHUB_WORKSPACE/.github/manifest/$TARGET_NAME"
-          elif [ -f "$GITHUB_WORKSPACE/manifests/$TARGET_NAME" ]; then
-            FOUND_FILE="$GITHUB_WORKSPACE/manifests/$TARGET_NAME"
-          else
-            FOUND_FILE=$(find "$GITHUB_WORKSPACE" -type f -iname "$TARGET_NAME" -not -path "*/.git/*" -not -path "*/toolchain/*" | head -n 1)
-          fi
+          # Hilangkan ekstensi .xml jika user sengaja/tidaksengaja mengetik 'camellia.xml' di input
+          RAW_INPUT="${{ inputs.manifest_name }}"
+          CLEAN_NAME="${RAW_INPUT%.xml}"
+          TARGET_NAME="${CLEAN_NAME}.xml"
+
+          echo "🔍 Mencari file manifest: $TARGET_NAME"
+
+          # Cari file manifest di seluruh workspace (mengabaikan folder .git dan toolchain)
+          FOUND_FILE=$(find "$GITHUB_WORKSPACE" -type f -iname "$TARGET_NAME" -not -path "*/.git/*" -not -path "*/toolchain/*" | head -n 1)
 
           if [ -z "$FOUND_FILE" ] || [ ! -f "$FOUND_FILE" ]; then
-            echo "::error::File $TARGET_NAME TIDAK DITEMUKAN di repositori!"
+            echo "::error::File $TARGET_NAME TIDAK DITEMUKAN di GitHub Runner!"
+            echo "=================================================="
+            echo "📂 Daftar seluruh file yang ada di repositori kamu saat ini:"
+            find "$GITHUB_WORKSPACE" -maxdepth 4 -not -path "*/.git/*" -not -path "*/toolchain/*"
+            echo "=================================================="
             exit 1
           fi
 
           MANIFEST_PATH="$FOUND_FILE"
-          echo "✅ Using manifest from: $MANIFEST_PATH"
+          echo "✅ File manifest ditemukan di: $MANIFEST_PATH"
 
           mkdir -p local-manifest
           cp "$MANIFEST_PATH" local-manifest/default.xml
