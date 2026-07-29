@@ -62,9 +62,6 @@ jobs:
       KERNEL_DEFCONFIG: "camellia_defconfig"
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
       - name: Maximize Build Space
         uses: easimon/maximize-build-space@master
         with:
@@ -76,7 +73,10 @@ jobs:
           remove-haskell: "true"
           remove-codeql: "true"
           remove-docker-images: "true"
-
+          
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
       - name: Send Telegram Start Notification & Save Message ID
         env:
           TELEGRAM_TOKEN: "${{ secrets.TELEGRAM_TOKEN }}"
