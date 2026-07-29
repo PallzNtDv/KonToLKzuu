@@ -448,7 +448,12 @@ jobs:
   # =========================================================================
   publish-release:
     needs: [build-kernel, build-manager]
-    if: always() && !cancelled() && (needs.build-kernel.result == 'success' || needs.build-manager.result == 'success')
+    if: |
+      always() && !cancelled() && (
+        (inputs.build_target == 'both' && needs.build-kernel.result == 'success' && needs.build-manager.result == 'success') ||
+        (inputs.build_target == 'kernel_only' && needs.build-kernel.result == 'success') ||
+        (inputs.build_target == 'manager_only' && needs.build-manager.result == 'success')
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: write
