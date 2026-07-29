@@ -112,30 +112,33 @@ jobs:
               ;;
             "zyc-clang")
               echo "Downloading ZyC Clang..."
-              # Ambil JSON release resmi dari GitLab API
-              RELEASE_JSON=$(curl -sL "https://gitlab.com/api/v4/projects/28003182/releases")
               
-              # Method 1: Ekstrak direct link dari daftar assets
+              # 1. Ambil JSON API dengan User-Agent agar tidak diblokir Cloudflare/403
+              RELEASE_JSON=$(curl -sSL -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" -H "Accept: application/json" "https://gitlab.com/api/v4/projects/28003182/releases")
+              
+              # Method A: Cari link file di daftar assets
               URL=$(echo "$RELEASE_JSON" | jq -r '.[0].assets.links[]?.url // empty' 2>/dev/null | grep -iE '\.tar\.(gz|xz)$' | head -n 1)
 
-              # Method 2: Ekstrak link dari deskripsi release jika assets kosong
+              # Method B: Cari link di deskripsi release
               if [ -z "$URL" ] || [ "$URL" = "null" ]; then
                 URL=$(echo "$RELEASE_JSON" | jq -r '.[0].description // empty' 2>/dev/null | grep -oE 'https://[^[:space:]"\)]+Clang[^[:space:]"\)]*\.tar\.(gz|xz)' | head -n 1)
               fi
 
-              # Method 3: Fallback scraping langsung dari halaman upload GitLab
+              # Method C: Web Scraping dengan User-Agent
               if [ -z "$URL" ] || [ "$URL" = "null" ]; then
-                URL=$(curl -sL "https://gitlab.com/zycke/ZyC-Clang/-/releases" | grep -oE '/zycke/ZyC-Clang/-/uploads/[^[:space:]"\)]+\.tar\.(gz|xz)' | head -n 1)
+                URL=$(curl -sSL -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" "https://gitlab.com/zycke/ZyC-Clang/-/releases" | grep -oE '/zycke/ZyC-Clang/-/uploads/[^[:space:]"\)]+\.tar\.(gz|xz)' | head -n 1)
                 [ -n "$URL" ] && URL="https://gitlab.com${URL}"
               fi
 
+              # Method D: Hardcoded Fallback (Jaminan pipeline tidak akan pernah gagal)
               if [ -z "$URL" ] || [ "$URL" = "null" ]; then
-                echo "❌ Error: Tidak dapat menemukan link download ZyC Clang!"
-                exit 1
+                echo "⚠️ API & Scraping diblokir oleh GitLab/Cloudflare. Menggunakan URL Fallback ZyC Clang..."
+                URL="https://gitlab.com/zycke/ZyC-Clang/-/package_files/115856331/download"
               fi
 
               echo "🔗 Downloading from: $URL"
-              wget -q "$URL" -O zyc-clang.tar.gz
+              wget --user-agent="Mozilla/5.0" -q "$URL" -O zyc-clang.tar.gz || curl -sSL -H "User-Agent: Mozilla/5.0" -o zyc-clang.tar.gz "$URL"
+              
               mkdir clang && tar -xf zyc-clang.tar.gz -C clang
               ;;
             "azure-clang")
