@@ -340,9 +340,16 @@ jobs:
 
       - name: Package AnyKernel3 & Generate SHA256
         run: |
+          # 1. Clone repositori AnyKernel3 jika belum ada di workspace
+          if [ ! -d "AnyKernel3" ]; then
+            echo "📥 Cloning AnyKernel3 repository..."
+            # Ganti URL di bawah dengan repositori AnyKernel3 spesifik Camellia milikmu
+            git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
+          fi
+
           cd AnyKernel3
 
-          # 1. Salin hasil kompilasi Kernel ke folder AnyKernel3
+          # 2. Salin hasil kompilasi Kernel ke folder AnyKernel3
           if [ -f "../kernel-source/out/arch/arm64/boot/Image.gz-dtb" ]; then
             cp ../kernel-source/out/arch/arm64/boot/Image.gz-dtb .
           elif [ -f "../kernel-source/out/arch/arm64/boot/Image.gz" ]; then
@@ -352,37 +359,43 @@ jobs:
             exit 1
           fi
 
-          # 2. Susun komponen nama dinamis
+          # 3. Susun komponen nama dinamis
           DATE_TAG=$(date +'%Y%m%d-%H%M')
           KERNEL_NAME="LinuxxPU"
           DEVICE="Camellia"
           TOOLCHAIN="${{ inputs.toolchain }}"
 
-          # Cek status fitur aktif
+          # Evaluasi varian (baik dari matrix maupun inputs)
           FEATURE_TAGS=""
-          [ "${{ inputs.enable_ksu }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-KSU"
-          [ "${{ inputs.enable_susfs }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-SUSFS"
-          [ "${{ inputs.enable_bbg }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-BBG"
+          [ "${{ matrix.variant.enable_ksu }}" = "true" ] || [ "${{ inputs.enable_ksu }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-KSU"
+          [ "${{ matrix.variant.enable_susfs }}" = "true" ] || [ "${{ inputs.enable_susfs }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-SUSFS"
+          [ "${{ matrix.variant.enable_bbg }}" = "true" ] || [ "${{ inputs.enable_bbg }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-BBG"
 
-          # Contoh hasil: LinuxxPU-Camellia-4.14-zyc-clang-KSU-SUSFS-20260729-1130.zip
-          ZIP_NAME="${KERNEL_NAME}-${DEVICE}-4.14-${TOOLCHAIN}${FEATURE_TAGS}-${DATE_TAG}.zip"
+          # Tentukan nama varian jika menggunakan matrix
+          VARIANT_NAME="${{ matrix.variant.name }}"
+          if [ -n "$VARIANT_NAME" ]; then
+            ZIP_NAME="${KERNEL_NAME}-${DEVICE}-4.14-${TOOLCHAIN}-${VARIANT_NAME}-${DATE_TAG}.zip"
+          else
+            ZIP_NAME="${KERNEL_NAME}-${DEVICE}-4.14-${TOOLCHAIN}${FEATURE_TAGS}-${DATE_TAG}.zip"
+          fi
 
-          # 3. Kompresi AnyKernel3 menjadi ZIP
+          # 4. Kompresi AnyKernel3 menjadi ZIP
           zip -r9 "$ZIP_NAME" ./* -x ".git*" "README.md" "*.zip"
 
-          # 4. Buat file SHA256 Checksum
+          # 5. Buat file SHA256 Checksum
           sha256sum "$ZIP_NAME" > "${ZIP_NAME}.sha256"
 
-          # 5. Tampilkan ringkasan di Log Runner
+          # 6. Tampilkan ringkasan di Log Runner
           echo "=================================================="
           echo "📦 Output Zip : $ZIP_NAME"
           echo "🔑 SHA256 Hash: $(awk '{print $1}' "${ZIP_NAME}.sha256")"
           echo "=================================================="
 
-          # 6. Ekspor variabel ke GITHUB_ENV agar bisa dipakai step upload / Telegram
+          # 7. Ekspor variabel ke GITHUB_ENV
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
           echo "ZIP_PATH=AnyKernel3/$ZIP_NAME" >> $GITHUB_ENV
           echo "SHA256_PATH=AnyKernel3/${ZIP_NAME}.sha256" >> $GITHUB_ENV
+          echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
 
       - name: Upload Kernel Artifacts
         uses: actions/upload-artifact@v4
