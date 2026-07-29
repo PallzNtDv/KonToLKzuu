@@ -553,21 +553,23 @@ jobs:
         run: |
           mkdir -p output_apk
 
+          # 1. Cek keberadaan folder manager-src terlebih dahulu
           if [ ! -d "manager-src" ]; then
-            echo "❌ Error: manager-src directory does not exist!"
+            echo "❌ Error: Folder manager-src tidak ditemukan! Proses kloning sebelumnya kemungkinan gagal."
             exit 1
           fi
 
+          # 2. Cari file APK release
           APK_FILE=$(find manager-src -name "*.apk" | grep -i "release" | head -n 1)
 
           if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
-            echo "✅ APK found at: $APK_FILE"
+            echo "✅ APK found in: $APK_FILE"
             cp "$APK_FILE" "output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk"
           else
-            echo "❌ Error: Compiled APK file not found!"
+            echo "❌ Error: File APK hasil kompilasi tidak ditemukan!"
             exit 1
           fi
-
+          
       - name: Upload Manager APK Artifact
         uses: actions/upload-artifact@v4
         with:
