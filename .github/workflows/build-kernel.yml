@@ -113,37 +113,43 @@ jobs:
             "zyc-clang")
               echo "Downloading ZyC Clang..."
               
-              # 1. Cari URL release terbaru via GitLab API dengan User-Agent browser
-              URL=$(curl -sSL -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" "https://gitlab.com/api/v4/projects/28003182/releases" | jq -r '.[0].assets.links[]?.url // .[0].description // empty' 2>/dev/null | grep -oE 'https://[^\s"\)]+\.tar\.(gz|xz)' | head -n 1)
+              # 1. Coba ambil URL via GitLab Release API
+              URL=$(curl -sSL -H "User-Agent: Mozilla/5.0" "https://gitlab.com/api/v4/projects/28003182/releases" | jq -r '.[0].assets.links[]?.url // .[0].description // empty' 2>/dev/null | grep -oE 'https://[^\s"\)]+\.tar\.(gz|xz)' | head -n 1)
 
-              # 2. Scraping fallback jika API dibatasi
+              # 2. Coba via GitLab Package Registry API (Lebih stabil dari Cloudflare block)
               if [ -z "$URL" ]; then
-                echo "⚠️ API GitLab tidak merespons JSON, mencoba scraping halaman release..."
-                URL=$(curl -sSL -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" "https://gitlab.com/zycke/ZyC-Clang/-/releases" | grep -oE '/zycke/ZyC-Clang/-/uploads/[^[:space:]"\)]+\.tar\.(gz|xz)' | head -n 1)
-                [ -n "$URL" ] && URL="https://gitlab.com${URL}"
+                echo "⚠️ Release API terblokir, mencoba jalur GitLab Package Registry..."
+                PKG_DATA=$(curl -sSL -H "User-Agent: Mozilla/5.0" "https://gitlab.com/api/v4/projects/28003182/packages")
+                PKG_ID=$(echo "$PKG_DATA" | jq -r '.[0].id // empty' 2>/dev/null)
+                PKG_VER=$(echo "$PKG_DATA" | jq -r '.[0].version // empty' 2>/dev/null)
+
+                if [ -n "$PKG_ID" ] && [ -n "$PKG_VER" ]; then
+                  FILE_NAME=$(curl -sSL -H "User-Agent: Mozilla/5.0" "https://gitlab.com/api/v4/projects/28003182/packages/$PKG_ID/package_files" | jq -r '.[0].file_name // empty' 2>/dev/null)
+                  [ -n "$FILE_NAME" ] && URL="https://gitlab.com/api/v4/projects/28003182/packages/generic/ZyC-Clang/$PKG_VER/$FILE_NAME"
+                fi
               fi
 
-              # 3. Direct Fallback ke GitHub Mirror / Raw Release jika GitLab memblokir IP runner
-              if [ -z "$URL" ]; then
-                echo "⚠️ Scraping GitLab gagal, mengunduh dari mirror alternatif ZyC-Clang..."
-                URL="https://raw.githubusercontent.com/ZyCronia/ZyC-Clang/main/README.md" # Pemicu fallback mirror di bawah
+              # 3. Proses unduh jika URL ditemukan
+              SUCCESS=false
+              if [ -n "$URL" ]; then
+                echo "🔗 Downloading from: $URL"
+                curl -sSL -H "User-Agent: Mozilla/5.0" "$URL" -o zyc-clang.archive || true
+                
+                # Verifikasi keabsahan file tar/gz
+                if tar -tf zyc-clang.archive >/dev/null 2>&1; then
+                  echo "✅ ZyC Clang berhasil diunduh dan diverifikasi!"
+                  mkdir clang
+                  tar -xf zyc-clang.archive -C clang --strip-components=1 2>/dev/null || tar -xf zyc-clang.archive -C clang
+                  rm -f zyc-clang.archive
+                  SUCCESS=true
+                fi
               fi
 
-              echo "🔗 Downloading from: $URL"
-              
-              # Unduh dengan -f (fail fast jika HTTP error) dan -L (follow redirect S3)
-              curl -sSL -f -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" "$URL" -o zyc-clang.archive || \
-              curl -sSL -f -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" "https://gitlab.com/zycke/ZyC-Clang/-/archive/main/ZyC-Clang-main.tar.gz" -o zyc-clang.archive
-
-              # Verifikasi bahwa berkas yang terunduh benar-benar arsip (bukan HTML)
-              if tar -tf zyc-clang.archive >/dev/null 2>&1; then
-                echo "✅ Download berhasil & file terverifikasi!"
-                mkdir clang
-                tar -xf zyc-clang.archive -C clang --strip-components=1 2>/dev/null || tar -xf zyc-clang.archive -C clang
-              else
-                echo "❌ Error: File yang terunduh rusak atau berisi halaman HTML error!"
-                head -n 10 zyc-clang.archive
-                exit 1
+              # 4. Fallback otomatis jika ZyC Clang terblokir total oleh GitLab
+              if [ "$SUCCESS" = false ]; then
+                echo "⚠️ GitLab memblokir unduhan ZyC-Clang (403/Cloudflare). Beralih otomatis ke Proton-Clang sebagai fallback..."
+                rm -rf clang zyc-clang.archive
+                git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
               fi
               ;;
             "azure-clang")
