@@ -52,16 +52,6 @@ on:
       # =========================================================================
       # INDIVIDUAL KERNEL-SIDE FEATURE TOGGLES
       # =========================================================================
-      include_susfs:
-        description: 'Enable SUSFS Integration'
-        required: true
-        type: boolean
-        default: true
-      include_bbg:
-        description: 'Enable Baseband-Guard (BBG)'
-        required: true
-        type: boolean
-        default: true
       include_lto_o3:
         description: 'Enable ThinLTO & -O3 Compiler Optimizations'
         required: true
