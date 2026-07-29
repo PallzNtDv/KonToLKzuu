@@ -218,6 +218,27 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
           repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
 
+      - name: Generate Kernel Changelog & Build Metadata
+        run: |
+          mkdir -p output_meta
+          
+          # 1. Capture 7 latest commits from kernel source
+          echo "#### 📝 Recent Kernel Commits" > output_meta/changelog.txt
+          if [ -d "kernel-source" ]; then
+            cd kernel-source
+            git log -n 7 --pretty=format:"* %h - %s (%an)" >> ../output_meta/changelog.txt
+            cd ..
+          else
+            echo "* No commit log available" >> output_meta/changelog.txt
+          fi
+
+          echo "" >> output_meta/changelog.txt
+          echo "#### 🛠️ Toolchain Details" >> output_meta/changelog.txt
+          
+          # 2. Capture Compiler Version
+          CLANG_VER=$($GITHUB_WORKSPACE/toolchain/clang/bin/clang --version | head -n 1)
+          echo "* **Compiler**: \`$CLANG_VER\`" >> output_meta/changelog.txt
+          
       - name: Setup KSU Fork ("${{ inputs.ksu_fork }}")
         run: |
           cd kernel-source
@@ -401,8 +422,8 @@ jobs:
         with:
           name: kernel-assets
           path: |
-            ${{ env.ZIP_PATH }}
-            ${{ env.SHA256_PATH }}
+            ${{ env.ZIP_PATH }}${{ env.SHA256_PATH }}
+            output_meta/changelog.txt
           retention-days: 7
 
       - name: Send Telegram Failure Notification (Kernel)
@@ -606,6 +627,15 @@ jobs:
             echo "SHA256_CONTENT=N/A" >> $GITHUB_ENV
           fi
 
+          # 🎯 Read dynamic changelog
+          if [ -f "release_assets/changelog.txt" ]; then
+            echo "CHANGELOG_BODY<<EOF" >> $GITHUB_ENV
+            cat release_assets/changelog.txt >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          else
+            echo "CHANGELOG_BODY=No changelog available." >> $GITHUB_ENV
+          fi
+
       - name: Auto-Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -632,6 +662,9 @@ jobs:
             * **ZRAM ZSTD**: `${{ inputs.include_zstd }}`
             * **TCP BBR**: `${{ inputs.include_bbr }}`
             * **TTL Spoofing**: `${{ inputs.include_ttl }}`
+
+            ---
+            ${{ env.CHANGELOG_BODY }}
 
             ---
             *📦 File SHA256 Checksum:*
