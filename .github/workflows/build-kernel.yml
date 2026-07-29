@@ -99,16 +99,35 @@ jobs:
         run: |
           mkdir -p toolchain
           cd toolchain
+
+          case "${{ inputs.toolchain }}" in
+            "proton-clang")
+              echo "Downloading Proton-Clang..."
+              git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
+              ;;
+            "zyc-clang")
+              echo "Downloading ZyC Clang..."
+              # ZyC Clang dari GitLab (sangat stabil untuk kernel 4.14 / 4.19)
+              URL=$(curl -s https://gitlab.com/api/v4/projects/28003182/releases | grep -oP '"url":\s*"\K[^"]*Clang-[^"]*\.tar\.gz' | head -n 1)
+              wget -q "$URL" -O zyc-clang.tar.gz
+              mkdir clang && tar -xf zyc-clang.tar.gz -C clang
+              ;;
+            "azure-clang")
+              echo "Downloading Azure Clang..."
+              git clone --depth=1 https://github.com/P3RF3CT-ST34LTH/azure-clang.git clang
+              ;;
+            "eva-clang")
+              echo "Downloading Eva GCC / Clang..."
+              git clone --depth=1 https://github.com/mvaisakh/gcc-arm64.git clang
+              ;;
+            *)
+              echo "Downloading Official AOSP Clang..."
+              wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android11-release/clang-r383902.tar.gz
+              mkdir clang && tar -xf clang-r383902.tar.gz -C clang
+              ;;
+          esac
           
-          if [ "${{ inputs.toolchain }}" = "proton-clang" ]; then
-            echo "Downloading Proton-Clang..."
-            git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
-          else
-            echo "Downloading Official AOSP Clang..."
-            wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android11-release/clang-r383902.tar.gz
-            mkdir clang && tar -xf clang-r383902.tar.gz -C clang
-          fi
-          
+          # GCC 4.9 cross-compiler tetap di-download sebagai pendukung
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git gcc64
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git gcc32
 
