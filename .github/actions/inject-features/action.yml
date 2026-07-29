@@ -1,0 +1,117 @@
+name: 'Inject Advanced Kernel Features'
+description: 'Inject customizable kernel features and optimizations into defconfig and source tree'
+
+inputs:
+  defconfig:
+    description: 'Target Defconfig File Name'
+    required: true
+  enable_lto_o3:
+    description: 'Enable ThinLTO & -O3 Optimizations'
+    required: false
+    default: 'true'
+  enable_wireguard:
+    description: 'Inject WireGuard'
+    required: false
+    default: 'true'
+  enable_f2fs:
+    description: 'Inject F2FS Backport'
+    required: false
+    default: 'true'
+  enable_zstd:
+    description: 'Enable ZRAM ZSTD'
+    required: false
+    default: 'true'
+  enable_bbr:
+    description: 'Enable TCP BBR / Westwood'
+    required: false
+    default: 'true'
+  enable_ttl:
+    description: 'Enable TTL / HL Spoofing'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Process Granular Kernel Injections
+      shell: bash
+      run: |
+        cd kernel-source
+        DEFCONFIG="arch/arm64/configs/${{ inputs.defconfig }}"
+
+        # -----------------------------------------------------------------
+        # 1. Compiler Optimizations (ThinLTO & -O3)
+        # -----------------------------------------------------------------
+        if [ "${{ inputs.enable_lto_o3 }}" = "true" ]; then
+          echo "🚀 Injecting Compiler Optimizations (-O3 & ThinLTO)..."
+          sed -i 's/-O2/-O3/g' Makefile || true
+          echo "CONFIG_LTO=y" >> $DEFCONFIG
+          echo "CONFIG_LTO_CLANG=y" >> $DEFCONFIG
+          echo "CONFIG_THINLTO=y" >> $DEFCONFIG
+          echo "CONFIG_ARCH_SUPPORTS_THINLTO=y" >> $DEFCONFIG
+        fi
+
+        # -----------------------------------------------------------------
+        # 2. WireGuard Protocol
+        # -----------------------------------------------------------------
+        if [ "${{ inputs.enable_wireguard }}" = "true" ]; then
+          echo "🌐 Installing WireGuard..."
+          git clone --depth=1 https://git.zx2c4.com/wireguard-linux-compat /tmp/wireguard
+          /tmp/wireguard/kernel-tree-scripts/wireguard-import.sh .
+          rm -rf /tmp/wireguard
+          echo "CONFIG_WIREGUARD=y" >> $DEFCONFIG
+        fi
+
+        # -----------------------------------------------------------------
+        # 3. F2FS Stable Backport
+        # -----------------------------------------------------------------
+        if [ "${{ inputs.enable_f2fs }}" = "true" ]; then
+          echo "💾 Fetching F2FS Backport..."
+          git remote add f2fs-stable https://git.kernel.org/pub/scm/linux/kernel/git/jaegeuk/f2fs-stable.git || true
+          git fetch --depth=50 f2fs-stable linux-4.14 || true
+          git merge --no-edit FETCH_HEAD || echo "⚠️ F2FS merge conflict, skipping auto-merge..."
+          echo "CONFIG_F2FS_FS=y" >> $DEFCONFIG
+          echo "CONFIG_F2FS_STAT_FS=y" >> $DEFCONFIG
+          echo "CONFIG_F2FS_FS_XATTR=y" >> $DEFCONFIG
+          echo "CONFIG_F2FS_FS_POSIX_ACL=y" >> $DEFCONFIG
+          echo "CONFIG_F2FS_FS_SECURITY=y" >> $DEFCONFIG
+          echo "CONFIG_F2FS_CHECK_FS=y" >> $DEFCONFIG
+        fi
+
+        # -----------------------------------------------------------------
+        # 4. ZRAM ZSTD Compression
+        # -----------------------------------------------------------------
+        if [ "${{ inputs.enable_zstd }}" = "true" ]; then
+          echo "📦 Enabling ZRAM ZSTD Compression..."
+          echo "CONFIG_ZSMALLOC=y" >> $DEFCONFIG
+          echo "CONFIG_ZRAM=y" >> $DEFCONFIG
+          echo "CONFIG_CRYPTO_ZSTD=y" >> $DEFCONFIG
+          echo "CONFIG_ZSTD_COMPRESS=y" >> $DEFCONFIG
+          echo "CONFIG_ZSTD_DECOMPRESS=y" >> $DEFCONFIG
+          echo "CONFIG_ZRAM_DEF_COMP=\"zstd\"" >> $DEFCONFIG
+        fi
+
+        # -----------------------------------------------------------------
+        # 5. TCP Congestion Control (BBR / Westwood)
+        # -----------------------------------------------------------------
+        if [ "${{ inputs.enable_bbr }}" = "true" ]; then
+          echo "⚡ Enabling TCP BBR & Westwood..."
+          echo "CONFIG_NET_SCHED=y" >> $DEFCONFIG
+          echo "CONFIG_NET_SCH_FQ=y" >> $DEFCONFIG
+          echo "CONFIG_NET_SCH_FQ_CODEL=y" >> $DEFCONFIG
+          echo "CONFIG_TCP_CONG_BBR=y" >> $DEFCONFIG
+          echo "CONFIG_TCP_CONG_WESTWOOD=y" >> $DEFCONFIG
+          echo "CONFIG_DEFAULT_TCP_CONG=\"bbr\"" >> $DEFCONFIG
+        fi
+
+        # -----------------------------------------------------------------
+        # 6. TTL / HL Packet Spoofing
+        # -----------------------------------------------------------------
+        if [ "${{ inputs.enable_ttl }}" = "true" ]; then
+          echo "🛡️ Enabling TTL/HL Spoofing..."
+          echo "CONFIG_NETFILTER_XT_TARGET_HL=y" >> $DEFCONFIG
+          echo "CONFIG_IP_NF_TARGET_TTL=y" >> $DEFCONFIG
+          echo "CONFIG_IP6_NF_TARGET_HL=y" >> $DEFCONFIG
+          echo "CONFIG_NETFILTER_XT_MATCH_HL=y" >> $DEFCONFIG
+        fi
+        
