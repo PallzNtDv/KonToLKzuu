@@ -444,6 +444,7 @@ jobs:
         run: |
           python3 << 'EOF'
           import os, glob, subprocess
+
           token = os.environ.get("TELEGRAM_TOKEN")
           chat_id = os.environ.get("TELEGRAM_CHAT_ID")
           manifest = os.environ.get("MANIFEST", "")
@@ -456,11 +457,29 @@ jobs:
                   name = os.path.basename(zip_file)
                   size = subprocess.check_output(["du", "-h", zip_file]).decode().split()[0]
                   caption = f"⚡ *LinuxxPU Kernel Ready!*\n\n📱 *Device:* {manifest}\n⚙️ *KSU Fork:* {ksu}\n📦 *File:* `{name}`\n📊 *Size:* {size}"
-                  cmd = ["curl", "-s", "-F", f"chat_id={chat_id}", "-F", f"document=@{zip_file}", "-F", f"caption={caption}", "-F", "parse_mode=Markdown", f"https://api.telegram.org/bot{token}/sendDocument"]
+                  cmd = [
+                      "curl", "-s",
+                      "-F", f"chat_id={chat_id}",
+                      "-F", f"document=@{zip_file}",
+                      "-F", f"caption={caption}",
+                      "-F", "parse_mode=Markdown",
+                      f"https://api.telegram.org/bot{token}/sendDocument"
+                  ]
                   subprocess.run(cmd)
 
               # Kirim Manager APK
               apks = glob.glob("release_assets/*.apk")
               for apk_file in apks:
                   name = os.path.basename(apk_file)
-                  size = subprocess.check_output(["du", "-h", apk_file]).
+                  size = subprocess.check_output(["du", "-h", apk_file]).decode().split()[0]
+                  caption = f"📱 *LinuxxPU Manager App!*\n\n⚙️ *Fork:* {ksu}\n📦 *File:* `{name}`\n📊 *Size:* {size}"
+                  cmd = [
+                      "curl", "-s",
+                      "-F", f"chat_id={chat_id}",
+                      "-F", f"document=@{apk_file}",
+                      "-F", f"caption={caption}",
+                      "-F", "parse_mode=Markdown",
+                      f"https://api.telegram.org/bot{token}/sendDocument"
+                  ]
+                  subprocess.run(cmd)
+          EOF
