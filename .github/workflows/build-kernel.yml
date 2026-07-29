@@ -541,22 +541,35 @@ jobs:
           path: release_assets
           merge-multiple: true
 
-      - name: Publish GitHub Release
+      - name: Auto-Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "release-${{ inputs.manifest_name }}-${{ inputs.ksu_fork }}-${{ github.run_number }}"
-          name: "Build #${{ github.run_number }} - ${{ inputs.manifest_name }} (${{ inputs.ksu_fork }})"
-          body: |
-            ### 🚀 Kernel & Manager Build Details
-            - **Device Manifest**: `${{ inputs.manifest_name }}`
-            - **KernelSU Fork**: `${{ inputs.ksu_fork }}`
-            - **Build Target**: `${{ inputs.build_target }}`
-            - **Toolchain**: `${{ inputs.toolchain }}`
-            - **Extra Features (SUSFS & BBG)**: `${{ inputs.include_extra_features }}`
-          files: |
-            release_assets/*
+          tag_name: v${{ env.DATE_TAG }}
+          name: "LinuxxPU Kernel - ${{ env.ZIP_NAME }}"
           draft: false
           prerelease: false
+          generate_release_notes: false
+          body: |
+            ### 🚀 LinuxxPU Kernel Release
+            
+            * **Device**: Xiaomi Camellia (`camellia`)
+            * **Kernel Version**: 4.14
+            * **Toolchain**: `${{ inputs.toolchain }}`
+            * **Build Date**: `${{ env.DATE_TAG }}`
+
+            #### 🛠️ Included Features
+            * **KernelSU**: `${{ inputs.enable_ksu }}`
+            * **SUSFS**: `${{ inputs.enable_susfs }}`
+            * **BBG**: `${{ inputs.enable_bbg }}`
+
+            ---
+            *📦 File SHA256 Verification:*
+            ```text
+            ${{ env.ZIP_NAME }}.sha256
+            ```
+          files: |
+            ${{ env.ZIP_PATH }}
+            ${{ env.SHA256_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
