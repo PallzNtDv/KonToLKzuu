@@ -495,13 +495,7 @@ jobs:
                   print("Telegram notification error:", e)
           EOF
 
-      - name: Setup Java JDK 21 & Gradle Cache
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-          cache: 'gradle'
-
+      # 🎯 1. CLONE SOURCE CODE MANAGER TERLEBIH DAHULU
       - name: Clone Manager Source Code ("${{ inputs.ksu_fork }}")
         run: |
           rm -rf manager-src
@@ -525,6 +519,15 @@ jobs:
             echo "❌ Error: Failed to clone Manager repository!"
             exit 1
           fi
+
+      # 🎯 2. SETUP JAVA DAN GRADLE CACHE (Setel Path ke manager-src)
+      - name: Setup Java JDK 21 & Gradle Cache
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+          cache-dependency-path: 'manager-src/**/*.gradle*'
 
       - name: Build Manager APK via Gradle
         run: |
@@ -595,7 +598,7 @@ jobs:
         run: |
           echo "❌ Manager build failed! Cancelling entire workflow..."
           gh run cancel ${{ github.run_id }}
-
+          
   # =========================================================================
   # JOB 3: PUBLISH TO GITHUB RELEASES & TELEGRAM
   # =========================================================================
