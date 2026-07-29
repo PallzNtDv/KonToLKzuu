@@ -1,0 +1,149 @@
+name: Fetch Upstream & Rebrand LinuxxPU
+
+on:
+  workflow_call:
+    inputs:
+      ksu_fork:
+        required: true
+        type: string
+      include_susfs:
+        required: true
+        type: boolean
+
+jobs:
+  fetch_and_patch:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y bc uni2ascii wamerican
+
+      - name: Fetch Upstream KSU Source
+        run: |
+          touch BUILD_SETTINGS.ME
+          
+          if [ "${{ inputs.ksu_fork }}" = "SUKISU" ]; then
+            git clone -b main https://github.com/ShirkNeko/SukiSU-Ultra KSU
+            tag_ver='SUKISU'
+          elif [ "${{ inputs.ksu_fork }}" = "xxKSU" ]; then
+            git clone -b master https://github.com/backslashxx/KernelSU KSU || git clone -b magic https://github.com/backslashxx/KernelSU KSU
+            tag_ver='xxKSU'
+          else
+            git clone -b main https://github.com/tiann/KernelSU KSU || git clone -b master https://github.com/tiann/KernelSU KSU
+            tag_ver='Official'
+          fi
+
+          cd KSU
+          
+          # Simpan metadata awal
+          echo "KSU_FORK=$(echo "${{ inputs.ksu_fork }}" | base64)" >> ${GITHUB_WORKSPACE}/BUILD_SETTINGS.ME
+          C_BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
+          echo "C_BRANCH_NAME=$(echo "${C_BRANCH_NAME}" | base64)" >> ${GITHUB_WORKSPACE}/BUILD_SETTINGS.ME
+          C_LAST_COMMIT=$(git log -n 1 --no-decorate | grep -E '^commit' | cut -d' ' -f2)
+          echo "C_LAST_COMMIT=$(echo "${C_LAST_COMMIT}" | base64)" >> ${GITHUB_WORKSPACE}/BUILD_SETTINGS.ME
+          
+          # Hitung versi otomatis dari log git & ksud/build.rs
+          C_VERSION=$(echo "$(git log --oneline | wc -l) - $(git rev-list ${C_LAST_COMMIT}..HEAD --count)" | bc)
+          C_TAG_NAME="$(git describe --tags --always 2>/dev/null || echo "v1.0.0")-${tag_ver}"
+          echo "C_TAG_NAME=$(echo "${C_TAG_NAME}" | base64)" >> ${GITHUB_WORKSPACE}/BUILD_SETTINGS.ME
+
+          version_code=$(echo $(grep -Eo ' [^ ]+ (\+|-) [^ ]+ (\+|-) [^;]+' ./userspace/ksud/build.rs 2>/dev/null | tr -d ' ' | sed "s/version_code/${C_VERSION}/") | bc 2>/dev/null || echo "10000")
+          
+          if grep -q '+= -DKSU_VERSION=' ./kernel/Makefile; then
+            hardcoded_ver=$(grep '+= -DKSU_VERSION=' ./kernel/Makefile | tr -d ' ' | cut -d'=' -f3)
+            if [ "${version_code}" -gt "${hardcoded_ver}" ] 2>/dev/null; then
+              sed -E -i 's/( \+= -DKSU_VERSION=)(.+)/\1'${version_code}'/' ./kernel/Makefile
+            fi
+          fi
+
+          echo "C_VERSION=$(echo "${C_VERSION}" | base64)" >> ${GITHUB_WORKSPACE}/BUILD_SETTINGS.ME
+          echo "C_VERSION_CODE=${version_code}" >> ${GITHUB_WORKSPACE}/BUILD_SETTINGS.ME
+
+          # Update versi di Gradle & Source Code
+          sed -E -i 's|val managerVersionName by extra.+|val managerVersionName by extra("'${C_TAG_NAME}'")|g' ./manager/build.gradle.kts 2>/dev/null || true
+          
+          cd ..
+          
+          # Integrasi SUSFS jika aktif
+          if [ "${{ inputs.include_susfs }}" = "true" ] && [ "${{ inputs.ksu_fork }}" = "SUKISU" ]; then
+            cd KSU
+            git clone --depth 1 -b builtin https://github.com/ShirkNeko/SukiSU-Ultra susfs_tmp
+            rm -rf kernel
+            mv susfs_tmp/kernel .
+            rm -rf susfs_tmp
+            cd ..
+          fi
+
+          # Pindahkan hasil fetch ke root directory
+          cp -af KSU/* KSU/.* . 2>/dev/null || true
+          rm -rf KSU
+
+      - name: Apply LinuxxPU Rebranding Patch
+        run: |
+          repo_folder=$(realpath .)
+
+          # 1. Bersihkan bahasa UI non-esensial & Card yang tidak perlu di Manager
+          for dirs in $(find ${repo_folder}/manager/app/src/main/res -maxdepth 1 -type d -name 'values-*' 2>/dev/null); do 
+            [ "$(echo $dirs | rev | cut -d'-' -f1 | rev)" != "night" ] && rm -rf $dirs
+          done
+
+          for file in $(find ${repo_folder}/manager -name 'Home*' 2>/dev/null); do 
+            sed -E -i -e 's|^([[:space:]]+)(UpdateCard\(\))|\1//\2|g' \
+                      -e 's|^([[:space:]]+)(Unofficial\(\))|\1//\2|g' \
+                      -e 's|^([[:space:]]+)(DonateCard\(\))|\1//\2|g' \
+                      -e 's|^([[:space:]]+)(LearnMoreCard\(\))|\1//\2|g' \
+                      -e 's|^([[:space:]]+)(IssueReportCard\(\))|\1//\2|g' \
+                      -e 's|^([[:space:]]+)(ContributionCard\(\))|\1//\2|g' $file || true
+          done
+
+          # 2. Patch Binary & Path (ksud -> lpud, magiskboot -> lpuboot)
+          for file in $(find ${repo_folder}/manager/app/src/main/jniLibs -name 'libmagiskboot.so' 2>/dev/null); do 
+            mv -f $file $(dirname $file)/liblpuboot.so
+          done
+
+          for file in $(grep -R ${repo_folder}/manager -e 'libmagiskboot.so' 2>/dev/null | cut -d':' -f1 | sort | uniq); do 
+            sed -i 's|libmagiskboot.so|liblpuboot.so|g' $file
+          done
+
+          [ -d ${repo_folder}/userspace/ksud ] && mv ${repo_folder}/userspace/ksud ${repo_folder}/userspace/lpud || true
+          [ -d ${repo_folder}/userspace/ksuinit ] && mv ${repo_folder}/userspace/ksuinit ${repo_folder}/userspace/lpuinit || true
+
+          # 3. Rename Package Names & Namespace ke com.ahmad.linuxxpu
+          for file in $(grep -R "${repo_folder}" -e 'me.weishu.kernelsu' 2>/dev/null | cut -d':' -f1 | sort | uniq); do 
+            sed -E -i 's|me(.)weishu(.)kernelsu|com\1ahmad\2linuxxpu|g' $file
+          done
+
+          for file in $(grep -R "${repo_folder}" -e 'com.sukisu.ultra' 2>/dev/null | cut -d':' -f1 | sort | uniq); do 
+            sed -E -i 's|(com.)sukisu(.)ultra|\1ahmad\2linuxxpu|g' $file
+          done
+
+          # 4. Injeksi Key Hash Manager Baru ke Makefile Kernel
+          sed -i -e 's|WKSU:|LINUXPU:|g' -e 's|WKSU_|KSU_|g' -e 's|Wild KSU|LinuxxPU|g' ${repo_folder}/kernel/Makefile 2>/dev/null || true
+          sed -E -i -e 's/(KSU[^[:space:]]+(EXPECTED|MANAGER)_SIZE).+0x.+/\1 := 0x373/g' \
+                    -e 's/(KSU[^[:space:]]+(EXPECTED|MANAGER)_HASH) := .+/\1 := 5028506331f6c9f189e2f6500d90c3d6972bd7033e960fed4b5dda1fe31a5e95/g' ${repo_folder}/kernel/Makefile 2>/dev/null || true
+
+          # 5. Ubah Nama Aplikasi di AndroidManifest
+          sed -E -i 's|^([[:space:]]+)android\:label\=.+|\1android:label="LinuxxPU"|g' ${repo_folder}/manager/app/src/main/AndroidManifest.xml 2>/dev/null || true
+
+          # 6. Batasi Kompilasi Hanya untuk arm64-v8a
+          for dir in $(find ${repo_folder}/manager/ ${repo_folder}/userspace/ -type d 2>/dev/null | grep -E '/(x86_64|armeabi-v7a|arm)$'); do 
+            rm -rf $dir
+          done
+          sed -E -i 's/APP_ABI \:= .+/APP_ABI := arm64-v8a/g' ${repo_folder}/userspace/Application.mk 2>/dev/null || true
+
+      - name: Upload Patched Source Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linuxxpu-patched-source
+          path: .
+          include-hidden-files: true
+          
