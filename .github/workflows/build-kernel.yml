@@ -216,6 +216,14 @@ jobs:
           name: LinuxxPU-${{ inputs.manifest_name }}-${{ inputs.ksu_fork }}
           path: LinuxxPU-${{ inputs.manifest_name }}-${{ inputs.ksu_fork }}.zip
 
+      - name: Send Telegram Failure Notification (Kernel)
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "parse_mode=Markdown" \
+            -d "text=❌ *Build Kernel Gagal!*%0A📱 *Device:* ${{ inputs.manifest_name }}%0A⚙️ *Fork:* ${{ inputs.ksu_fork }}"
+
   # =========================================================================
   # JOB 2: BUILD MANAGER APP
   # =========================================================================
@@ -281,8 +289,16 @@ jobs:
           name: ${{ inputs.ksu_fork }}-Manager-APK
           path: output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk
 
+      - name: Send Telegram Failure Notification (Manager)
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "parse_mode=Markdown" \
+            -d "text=❌ *Build Manager Gagal!*%0A⚙️ *Fork:* ${{ inputs.ksu_fork }}"
+
   # =========================================================================
-  # JOB 3: PUBLISH TO GITHUB RELEASES
+  # JOB 3: PUBLISH TO GITHUB RELEASES & TELEGRAM
   # =========================================================================
   publish-release:
     needs: [build-kernel, build-manager]
@@ -319,3 +335,39 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Send Built Files (Kernel & Manager) to Telegram
+        if: success()
+        run: |
+          TOKEN="${{ secrets.TELEGRAM_TOKEN }}"
+          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+          
+          KERNEL_ZIP=$(find release_assets -type f -name "*.zip" | head -n 1)
+          MANAGER_APK=$(find release_assets -type f -name "*.apk" | head -n 1)
+
+          # --- Kirim Kernel Zip ke Telegram ---
+          if [ -f "$KERNEL_ZIP" ]; then
+            ZIP_NAME=$(basename "$KERNEL_ZIP")
+            ZIP_SIZE=$(du -h "$KERNEL_ZIP" | cut -f1)
+            
+            echo "Sending Kernel Zip to Telegram..."
+            curl -s -F chat_id="$CHAT_ID" \
+                 -F document=@"$KERNEL_ZIP" \
+                 -F caption="⚡ *LinuxxPU Kernel Ready!*%0A%0A📱 *Device:* ${{ inputs.manifest_name }}%0A⚙️ *KSU Fork:* ${{ inputs.ksu_fork }}%0A📦 *File:* \`$ZIP_NAME\`%0A📊 *Size:* $ZIP_SIZE" \
+                 -F parse_mode="Markdown" \
+                 "https://api.telegram.org/bot${TOKEN}/sendDocument"
+          fi
+
+          # --- Kirim Manager APK ke Telegram ---
+          if [ -f "$MANAGER_APK" ]; then
+            APK_NAME=$(basename "$MANAGER_APK")
+            APK_SIZE=$(du -h "$MANAGER_APK" | cut -f1)
+            
+            echo "Sending Manager APK to Telegram..."
+            curl -s -F chat_id="$CHAT_ID" \
+                 -F document=@"$MANAGER_APK" \
+                 -F caption="📱 *LinuxxPU Manager App!*%0A%0A⚙️ *Fork:* ${{ inputs.ksu_fork }}%0A📦 *File:* \`$APK_NAME\`%0A📊 *Size:* $APK_SIZE" \
+                 -F parse_mode="Markdown" \
+                 "https://api.telegram.org/bot${TOKEN}/sendDocument"
+          fi
+          
