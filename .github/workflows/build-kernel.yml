@@ -68,19 +68,26 @@ jobs:
           EXTRA: "${{ inputs.include_extra_features }}"
           RUN_NUM: "${{ github.run_number }}"
         run: |
-          python3 -c '
+          python3 << 'EOF'
           import os, urllib.request, urllib.parse
           token = os.environ.get("TELEGRAM_TOKEN")
           chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+          manifest = os.environ.get("MANIFEST", "")
+          target = os.environ.get("TARGET", "")
+          ksu = os.environ.get("KSU", "")
+          toolchain = os.environ.get("TOOLCHAIN", "")
+          extra = os.environ.get("EXTRA", "")
+          run_num = os.environ.get("RUN_NUM", "")
+
           if token and chat_id:
-              text = f"⚡ *LinuxxPU Build Engine Initialized*\n\n📱 *Device:* {os.environ.get(\"MANIFEST\")}\n🎯 *Target:* {os.environ.get(\"TARGET\")}\n🔑 *KSU Engine:* {os.environ.get(\"KSU\")}\n🛠️ *Toolchain:* {os.environ.get(\"TOOLCHAIN\")}\n🛡️ *SUSFS & BBG:* {os.environ.get(\"EXTRA\")}\n🔢 *Build Run:* #{os.environ.get(\"RUN_NUM\")}\n\n⚙️ *Status:* Compiling source code..."
+              text = f"⚡ *LinuxxPU Build Engine Initialized*\n\n📱 *Device:* {manifest}\n🎯 *Target:* {target}\n🔑 *KSU Engine:* {ksu}\n🛠️ *Toolchain:* {toolchain}\n🛡️ *SUSFS & BBG:* {extra}\n🔢 *Build Run:* #{run_num}\n\n⚙️ *Status:* Compiling source code..."
               data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode()
               req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
               try:
                   urllib.request.urlopen(req)
               except Exception as e:
-                  print("Telegram notification status:", e)
-          '
+                  print("Telegram notification error:", e)
+          EOF
 
       - name: Setup Build Dependencies
         run: |
@@ -254,19 +261,22 @@ jobs:
           MANIFEST: "${{ inputs.manifest_name }}"
           KSU: "${{ inputs.ksu_fork }}"
         run: |
-          python3 -c '
+          python3 << 'EOF'
           import os, urllib.request, urllib.parse
           token = os.environ.get("TELEGRAM_TOKEN")
           chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+          manifest = os.environ.get("MANIFEST", "")
+          ksu = os.environ.get("KSU", "")
+
           if token and chat_id:
-              text = f"❌ *Build Kernel Failed!*\n📱 *Device:* {os.environ.get(\"MANIFEST\")}\n⚙️ *Fork:* {os.environ.get(\"KSU\")}"
+              text = f"❌ *Build Kernel Failed!*\n📱 *Device:* {manifest}\n⚙️ *Fork:* {ksu}"
               data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode()
               req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
               try:
                   urllib.request.urlopen(req)
               except Exception as e:
                   print("Telegram notification error:", e)
-          '
+          EOF
 
   # =========================================================================
   # JOB 2: BUILD MANAGER APP
@@ -290,19 +300,24 @@ jobs:
           KSU: "${{ inputs.ksu_fork }}"
           RUN_NUM: "${{ github.run_number }}"
         run: |
-          python3 -c '
+          python3 << 'EOF'
           import os, urllib.request, urllib.parse
           token = os.environ.get("TELEGRAM_TOKEN")
           chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+          manifest = os.environ.get("MANIFEST", "")
+          target = os.environ.get("TARGET", "")
+          ksu = os.environ.get("KSU", "")
+          run_num = os.environ.get("RUN_NUM", "")
+
           if token and chat_id:
-              text = f"⚡ *LinuxxPU Build Engine Initialized*\n\n📱 *Device Target:* {os.environ.get(\"MANIFEST\")}\n🎯 *Build Target:* {os.environ.get(\"TARGET\")}\n🔑 *KSU Engine:* {os.environ.get(\"KSU\")}\n🔢 *Build Run:* #{os.environ.get(\"RUN_NUM\")}\n\n⚙️ *Status:* Compiling Manager APK..."
+              text = f"⚡ *LinuxxPU Build Engine Initialized*\n\n📱 *Device Target:* {manifest}\n🎯 *Build Target:* {target}\n🔑 *KSU Engine:* {ksu}\n🔢 *Build Run:* #{run_num}\n\n⚙️ *Status:* Compiling Manager APK..."
               data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode()
               req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
               try:
                   urllib.request.urlopen(req)
               except Exception as e:
-                  print("Telegram notification status:", e)
-          '
+                  print("Telegram notification error:", e)
+          EOF
 
       - name: Setup Java JDK 21
         uses: actions/setup-java@v4
@@ -364,19 +379,21 @@ jobs:
           TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
           KSU: "${{ inputs.ksu_fork }}"
         run: |
-          python3 -c '
+          python3 << 'EOF'
           import os, urllib.request, urllib.parse
           token = os.environ.get("TELEGRAM_TOKEN")
           chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+          ksu = os.environ.get("KSU", "")
+
           if token and chat_id:
-              text = f"❌ *Build Manager Failed!*\n⚙️ *Fork:* {os.environ.get(\"KSU\")}"
+              text = f"❌ *Build Manager Failed!*\n⚙️ *Fork:* {ksu}"
               data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode()
               req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
               try:
                   urllib.request.urlopen(req)
               except Exception as e:
                   print("Telegram notification error:", e)
-          '
+          EOF
 
   # =========================================================================
   # JOB 3: PUBLISH TO GITHUB RELEASES & TELEGRAM
@@ -425,12 +442,12 @@ jobs:
           MANIFEST: "${{ inputs.manifest_name }}"
           KSU: "${{ inputs.ksu_fork }}"
         run: |
-          python3 -c '
+          python3 << 'EOF'
           import os, glob, subprocess
           token = os.environ.get("TELEGRAM_TOKEN")
           chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-          manifest = os.environ.get("MANIFEST")
-          ksu = os.environ.get("KSU")
+          manifest = os.environ.get("MANIFEST", "")
+          ksu = os.environ.get("KSU", "")
 
           if token and chat_id:
               # Kirim Kernel ZIP
@@ -446,9 +463,4 @@ jobs:
               apks = glob.glob("release_assets/*.apk")
               for apk_file in apks:
                   name = os.path.basename(apk_file)
-                  size = subprocess.check_output(["du", "-h", apk_file]).decode().split()[0]
-                  caption = f"📱 *LinuxxPU Manager App!*\n\n⚙️ *Fork:* {ksu}\n📦 *File:* `{name}`\n📊 *Size:* {size}"
-                  cmd = ["curl", "-s", "-F", f"chat_id={chat_id}", "-F", f"document=@{apk_file}", "-F", f"caption={caption}", "-F", "parse_mode=Markdown", f"https://api.telegram.org/bot{token}/sendDocument"]
-                  subprocess.run(cmd)
-          '
-          
+                  size = subprocess.check_output(["du", "-h", apk_file]).
