@@ -259,6 +259,10 @@ jobs:
       - name: Build Kernel Image
         run: |
           cd kernel-source
+
+          # Remove the old Clang-bundled `ld` so that the host tool (`fixdep`) uses Ubuntu's system `ld`.
+          rm -f $GITHUB_WORKSPACE/toolchain/clang/bin/ld
+          
           export PATH=$GITHUB_WORKSPACE/toolchain/clang/bin:$GITHUB_WORKSPACE/toolchain/gcc64/bin:$GITHUB_WORKSPACE/toolchain/gcc32/bin:$PATH
           
           make O=out ARCH=${{ env.ARCH }} $KERNEL_DEFCONFIG
