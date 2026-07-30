@@ -508,137 +508,6 @@ jobs:
           EOF
 
   # =========================================================================
-  # JOB 2: BUILD MANAGER APP
-  # =========================================================================
-  build-manager:
-    needs: build-kernel
-    if: |
-      always() && !cancelled() && (
-        inputs.build_target == 'both' || inputs.build_target == 'manager_only'
-      )
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Clone Manager Source Code ("${{ inputs.ksu_fork }}")
-        run: |
-          clone_repo() {
-            local url=$1
-            rm -rf manager-src
-            echo "📥 Attempting to clone: $url"
-            git clone --depth=1 --recurse-submodules "$url" manager-src
-          }
-
-          if [ "${{ inputs.ksu_fork }}" = "xxKSU" ]; then
-            echo "Cloning xxKSU Manager..."
-            clone_repo "https://github.com/rifs28/KernelSU-Next.git" || \
-            clone_repo "https://github.com/tiann/KernelSU.git"
-          elif [ "${{ inputs.ksu_fork }}" = "SUKISU" ]; then
-            echo "Cloning SUKISU Manager..."
-            clone_repo "https://github.com/SukiSU-Ultra/SukiSU-Manager.git" || \
-            clone_repo "https://github.com/SukiSU-Ultra/SukiSU-Ultra.git" || \
-            clone_repo "https://github.com/tiann/KernelSU.git"
-          elif [ "${{ inputs.ksu_fork }}" = "KSU-Next" ]; then
-            echo "Cloning KernelSU-Next Manager..."
-            clone_repo "https://github.com/rifs28/KernelSU-Next.git" || \
-            clone_repo "https://github.com/tiann/KernelSU.git"
-          else
-            echo "Cloning Official KernelSU Manager..."
-            clone_repo "https://github.com/tiann/KernelSU.git"
-          fi
-
-          GW_FILE=$(find manager-src -maxdepth 3 -name "gradlew" 2>/dev/null | head -n 1)
-
-          if [ ! -d "manager-src" ] || [ -z "$GW_FILE" ]; then
-            echo "❌ Error: Failed to clone a valid Manager repository or gradlew missing!"
-            exit 1
-          fi
-
-          echo "✅ Manager repository successfully cloned!"
-
-      - name: Setup Java JDK 21 & Gradle Cache
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-          cache: 'gradle'
-          cache-dependency-path: 'manager-src/**/*.gradle*'
-
-      - name: Build Manager APK via Gradle
-        run: |
-          GW_FILE=$(find manager-src -maxdepth 3 -name "gradlew" 2>/dev/null | head -n 1)
-
-          if [ -z "$GW_FILE" ]; then
-            echo "❌ Error: gradlew file not found in manager-src!"
-            exit 1
-          fi
-
-          GRADLE_DIR=$(dirname "$GW_FILE")
-          echo "✅ Gradle project location found at: $GRADLE_DIR"
-          cd "$GRADLE_DIR"
-          chmod +x gradlew
-          ./gradlew :app:assembleRelease --no-daemon
-
-      - name: Organize APK Artifact
-        run: |
-          mkdir -p output_apk
-
-          if [ ! -d "manager-src" ]; then
-            echo "❌ Error: Directory 'manager-src' not found! Previous clone step might have failed."
-            exit 1
-          fi
-
-          APK_FILE=$(find manager-src -name "*.apk" | grep -i "release" | head -n 1)
-
-          if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
-            echo "✅ APK found at: $APK_FILE"
-            cp "$APK_FILE" "output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk"
-          else
-            echo "❌ Error: Compiled APK file not found!"
-            exit 1
-          fi
-
-      - name: Upload Manager APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: manager-assets
-          path: "output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk"
-
-      - name: Send Telegram Failure Notification (Manager)
-        if: failure()
-        env:
-          TELEGRAM_TOKEN: "${{ secrets.TELEGRAM_TOKEN }}"
-          TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
-          KSU: "${{ inputs.ksu_fork }}"
-        run: |
-          python3 << 'EOF'
-          import os, urllib.request, urllib.parse
-          token = os.environ.get("TELEGRAM_TOKEN")
-          chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-          ksu = os.environ.get("KSU", "")
-
-          if token and chat_id:
-              text = f"❌ *Manager Build Failed!*\n⚙️ *Fork:* {ksu}"
-              data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode()
-              req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
-              try:
-                  urllib.request.urlopen(req)
-              except Exception as e:
-                  print("Telegram notification error:", e)
-          EOF
-
-      - name: Cancel Entire Workflow on Failure
-        if: failure()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "❌ Manager build failed! Cancelling entire workflow..."
-          gh run cancel ${{ github.run_id }}
-
-  # =========================================================================
   # JOB 3: PUBLISH TO GITHUB RELEASES & TELEGRAM
   # =========================================================================
   publish-release:
@@ -668,7 +537,7 @@ jobs:
           DATE_TAG=$(date +'%Y%m%d-%H%M')
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
 
-          ZIP_FILE=$(find release_assets -name "*.zip" | head -n 1)
+          ZIP_FILE=$(find release_assets -type f -name "*.zip" | head -n 1)
           if [ -n "$ZIP_FILE" ]; then
             ZIP_NAME=$(basename "$ZIP_FILE")
             echo "RELEASE_TITLE=LinuxxPU Kernel - $ZIP_NAME" >> $GITHUB_ENV
@@ -676,18 +545,19 @@ jobs:
             echo "RELEASE_TITLE=LinuxxPU Build Release v$DATE_TAG" >> $GITHUB_ENV
           fi
 
-          SHA_FILE=$(find release_assets -name "*.sha256" | head -n 1)
+          SHA_FILE=$(find release_assets -type f -name "*.sha256" | head -n 1)
           if [ -n "$SHA_FILE" ]; then
             echo "SHA256_CONTENT=$(cat "$SHA_FILE")" >> $GITHUB_ENV
           else
             echo "SHA256_CONTENT=N/A" >> $GITHUB_ENV
           fi
 
-          # Read dynamic changelog if present
-          if [ -f "release_assets/changelog.txt" ]; then
-            echo "CHANGELOG_BODY<<EOF" >> $GITHUB_ENV
-            cat release_assets/changelog.txt >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
+          CHANGELOG_FILE=$(find release_assets -type f -name "changelog.txt" | head -n 1)
+          if [ -n "$CHANGELOG_FILE" ] && [ -f "$CHANGELOG_FILE" ]; then
+            EOF_MARKER="EOF_$(date +%s)"
+            echo "CHANGELOG_BODY<<$EOF_MARKER" >> $GITHUB_ENV
+            cat "$CHANGELOG_FILE" >> $GITHUB_ENV
+            echo "$EOF_MARKER" >> $GITHUB_ENV
           else
             echo "CHANGELOG_BODY=No changelog available." >> $GITHUB_ENV
           fi
@@ -728,7 +598,7 @@ jobs:
             ${{ env.SHA256_CONTENT }}
             ```
           files: |
-            release_assets/*
+            release_assets/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -772,15 +642,18 @@ jobs:
           feature_str = "\n".join([f"  • {f}" for f in features]) if features else "  • Default Configuration"
 
           if token and chat_id:
-              zips = glob.glob("release_assets/*.zip")
+              # Mencari ZIP secara rekursif di seluruh subfolder release_assets/
+              zips = glob.glob("release_assets/**/*.zip", recursive=True)
+              print(f"📦 Found ZIP files: {zips}")
               for zip_file in zips:
                   name = os.path.basename(zip_file)
                   size = subprocess.check_output(["du", "-h", zip_file]).decode().split()[0]
                   
-                  sha_file = zip_file + ".sha256"
+                  # Mencari SHA256 secara rekursif
                   sha_hash = "N/A"
-                  if os.path.exists(sha_file):
-                      with open(sha_file, "r") as f:
+                  sha_matches = glob.glob(f"release_assets/**/{name}.sha256", recursive=True)
+                  if sha_matches and os.path.exists(sha_matches[0]):
+                      with open(sha_matches[0], "r") as f:
                           sha_hash = f.read().strip().split()[0]
 
                   caption = (
@@ -800,9 +673,12 @@ jobs:
                       "-F", "parse_mode=Markdown",
                       f"https://api.telegram.org/bot{token}/sendDocument"
                   ]
-                  subprocess.run(cmd)
+                  res = subprocess.run(cmd, capture_output=True, text=True)
+                  print(f"✅ Telegram Kernel Sent: {name} | Response: {res.stdout}")
 
-              apks = glob.glob("release_assets/*.apk")
+              # Mencari APK secara rekursif
+              apks = glob.glob("release_assets/**/*.apk", recursive=True)
+              print(f"📱 Found APK files: {apks}")
               for apk_file in apks:
                   name = os.path.basename(apk_file)
                   size = subprocess.check_output(["du", "-h", apk_file]).decode().split()[0]
@@ -820,7 +696,10 @@ jobs:
                       "-F", "parse_mode=Markdown",
                       f"https://api.telegram.org/bot{token}/sendDocument"
                   ]
-                  subprocess.run(cmd)
+                  res = subprocess.run(cmd, capture_output=True, text=True)
+                  print(f"✅ Telegram Manager Sent: {name} | Response: {res.stdout}")
+          else:
+              print("⚠️ Telegram Token or Chat ID is missing!")
           EOF
 
       - name: Update Progress -> Complete
@@ -832,15 +711,18 @@ jobs:
           KSU_FORK: "${{ inputs.ksu_fork }}"
         run: |
           python3 << 'EOF'
-          import os, urllib.request, urllib.parse
+          import os, glob, urllib.request, urllib.parse
 
           token = os.environ.get("TELEGRAM_TOKEN")
           chat_id = os.environ.get("TELEGRAM_CHAT_ID")
           manifest = os.environ.get("MANIFEST_NAME", "")
           ksu = os.environ.get("KSU_FORK", "")
-          msg_file = "release_assets/telegram_msg.id" # Downloaded from build artifacts
 
-          if token and chat_id and os.path.exists(msg_file):
+          # Mencari telegram_msg.id secara rekursif di seluruh subfolder
+          msg_files = glob.glob("release_assets/**/telegram_msg.id", recursive=True)
+
+          if token and chat_id and msg_files:
+              msg_file = msg_files[0]
               with open(msg_file, "r") as f:
                   msg_id = f.read().strip()
 
@@ -853,7 +735,11 @@ jobs:
               data = urllib.parse.urlencode({"chat_id": chat_id, "message_id": msg_id, "text": text, "parse_mode": "Markdown"}).encode()
               req = urllib.request.Request(f"https://api.telegram.org/bot{token}/editMessageText", data=data)
               try:
-                  urllib.request.urlopen(req)
+                  res = urllib.request.urlopen(req)
+                  print(f"✅ Telegram progress message #{msg_id} updated successfully!")
               except Exception as e:
                   print("Telegram finish notification error:", e)
+          else:
+              print(f"⚠️ Unable to update Telegram message ID. Found msg_files: {msg_files}")
           EOF
+          
