@@ -508,6 +508,137 @@ jobs:
           EOF
 
   # =========================================================================
+  # JOB 2: BUILD MANAGER APP
+  # =========================================================================
+  build-manager:
+    needs: build-kernel
+    if: |
+      always() && !cancelled() && (
+        inputs.build_target == 'both' || inputs.build_target == 'manager_only'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Clone Manager Source Code ("${{ inputs.ksu_fork }}")
+        run: |
+          clone_repo() {
+            local url=$1
+            rm -rf manager-src
+            echo "📥 Attempting to clone: $url"
+            git clone --depth=1 --recurse-submodules "$url" manager-src
+          }
+
+          if [ "${{ inputs.ksu_fork }}" = "xxKSU" ]; then
+            echo "Cloning xxKSU Manager..."
+            clone_repo "https://github.com/rifs28/KernelSU-Next.git" || \
+            clone_repo "https://github.com/tiann/KernelSU.git"
+          elif [ "${{ inputs.ksu_fork }}" = "SUKISU" ]; then
+            echo "Cloning SUKISU Manager..."
+            clone_repo "https://github.com/SukiSU-Ultra/SukiSU-Manager.git" || \
+            clone_repo "https://github.com/SukiSU-Ultra/SukiSU-Ultra.git" || \
+            clone_repo "https://github.com/tiann/KernelSU.git"
+          elif [ "${{ inputs.ksu_fork }}" = "KSU-Next" ]; then
+            echo "Cloning KernelSU-Next Manager..."
+            clone_repo "https://github.com/rifs28/KernelSU-Next.git" || \
+            clone_repo "https://github.com/tiann/KernelSU.git"
+          else
+            echo "Cloning Official KernelSU Manager..."
+            clone_repo "https://github.com/tiann/KernelSU.git"
+          fi
+
+          GW_FILE=$(find manager-src -maxdepth 3 -name "gradlew" 2>/dev/null | head -n 1)
+
+          if [ ! -d "manager-src" ] || [ -z "$GW_FILE" ]; then
+            echo "❌ Error: Failed to clone a valid Manager repository or gradlew missing!"
+            exit 1
+          fi
+
+          echo "✅ Manager repository successfully cloned!"
+
+      - name: Setup Java JDK 21 & Gradle Cache
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+          cache-dependency-path: 'manager-src/**/*.gradle*'
+
+      - name: Build Manager APK via Gradle
+        run: |
+          GW_FILE=$(find manager-src -maxdepth 3 -name "gradlew" 2>/dev/null | head -n 1)
+
+          if [ -z "$GW_FILE" ]; then
+            echo "❌ Error: gradlew file not found in manager-src!"
+            exit 1
+          fi
+
+          GRADLE_DIR=$(dirname "$GW_FILE")
+          echo "✅ Gradle project location found at: $GRADLE_DIR"
+          cd "$GRADLE_DIR"
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Organize APK Artifact
+        run: |
+          mkdir -p output_apk
+
+          if [ ! -d "manager-src" ]; then
+            echo "❌ Error: Directory 'manager-src' not found! Previous clone step might have failed."
+            exit 1
+          fi
+
+          APK_FILE=$(find manager-src -name "*.apk" | grep -i "release" | head -n 1)
+
+          if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
+            echo "✅ APK found at: $APK_FILE"
+            cp "$APK_FILE" "output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk"
+          else
+            echo "❌ Error: Compiled APK file not found!"
+            exit 1
+          fi
+
+      - name: Upload Manager APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: manager-assets
+          path: "output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk"
+
+      - name: Send Telegram Failure Notification (Manager)
+        if: failure()
+        env:
+          TELEGRAM_TOKEN: "${{ secrets.TELEGRAM_TOKEN }}"
+          TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
+          KSU: "${{ inputs.ksu_fork }}"
+        run: |
+          python3 << 'EOF'
+          import os, urllib.request, urllib.parse
+          token = os.environ.get("TELEGRAM_TOKEN")
+          chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+          ksu = os.environ.get("KSU", "")
+
+          if token and chat_id:
+              text = f"❌ *Manager Build Failed!*\n⚙️ *Fork:* {ksu}"
+              data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode()
+              req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
+              try:
+                  urllib.request.urlopen(req)
+              except Exception as e:
+                  print("Telegram notification error:", e)
+          EOF
+
+      - name: Cancel Entire Workflow on Failure
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "❌ Manager build failed! Cancelling entire workflow..."
+          gh run cancel ${{ github.run_id }}
+  
+  # =========================================================================
   # JOB 3: PUBLISH TO GITHUB RELEASES & TELEGRAM
   # =========================================================================
   publish-release:
