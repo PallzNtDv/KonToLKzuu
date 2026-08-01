@@ -28,7 +28,7 @@ on:
         type: choice
         options:
           - camellia
-          - flyme-test
+          - vortex-test
           - vortex-v1
           - lineage-23.2
       include_susfs:
