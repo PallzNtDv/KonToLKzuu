@@ -27,6 +27,7 @@ on:
         required: true
         type: choice
         options:
+          - lotus-kernel
           - camellia
           - vortex-test
           - vortex-v1
