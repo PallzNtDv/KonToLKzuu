@@ -441,16 +441,39 @@ jobs:
             exit 1
           fi
 
-          # 2. Patch anykernel.sh Otomatis untuk Camellia (Fix Aborted)
+          # 2. Patch anykernel.sh Otomatis untuk Camellia & ASCII Art Versi 2 (Cyber)
           sed -i 's/\r$//' anykernel.sh
           sed -i 's/do.devicecheck=.*/do.devicecheck=1/g' anykernel.sh
           sed -i 's/device.name1=.*/device.name1=camellia/g' anykernel.sh
           sed -i 's/device.name2=.*/device.name2=camellian/g' anykernel.sh
           sed -i 's|block=.*;|block=/dev/block/by-name/boot;|g' anykernel.sh
 
+          # Inject Banner ASCII Art Versi 2 (Cyber / Bold Hash)
+          cat << 'EOF' > banner.tmp
+          ui_print "==================================================";
+          ui_print " #    ####  ##### #   #  ###   ### #  ####  #   # ";
+          ui_print " #   #    #   #   #   # #     #    # #     # #  # ";
+          ui_print " #   #    #   #   #   #  ###  #    ##      #  # # ";
+          ui_print " #   #    #   #   #   #     # #    # #     #   ## ";
+          ui_print " ###  ####    #    ###  ####   ### #  #### #    # ";
+          ui_print "==================================================";
+          ui_print "                  Lotus-Kernel                    ";
+          ui_print "==================================================";
+          ui_print " [>] Device   : Xiaomi Camellia (Redmi Note 10 5G)";
+          ui_print " [>] Kernel   : Linux 4.14.x";
+          ui_print " [>] Engine   : ${{ inputs.ksu_fork }}";
+          ui_print " [>] SUSFS    : ${{ inputs.include_susfs }}";
+          ui_print "==================================================";
+          ui_print " ";
+          EOF
+
+          # Sisipkan banner ke awal script anykernel.sh
+          sed -i '/# anykernel.sh/r banner.tmp' anykernel.sh
+          rm -f banner.tmp
+
           # 3. Generate Nama ZIP
           DATE_TAG=$(date +'%Y%m%d-%H%M')
-          KERNEL_NAME="Lotus"
+          KERNEL_NAME="Lotus-Kernel"
           DEVICE="camellia"
           TOOLCHAIN="${{ inputs.toolchain }}"
 
@@ -458,23 +481,12 @@ jobs:
           [ -n "${{ inputs.ksu_fork }}" ] && FEATURE_TAGS="${FEATURE_TAGS}-${{ inputs.ksu_fork }}"
           [ "${{ inputs.include_susfs }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-SUSFS"
           [ "${{ inputs.include_bbg }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-BBG"
-          [ "${{ inputs.include_lto_o3 }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-LTO"
-          [ "${{ inputs.include_wireguard }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-WG"
-          [ "${{ inputs.include_f2fs }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-F2FS"
-          [ "${{ inputs.include_zstd }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-ZSTD"
-          [ "${{ inputs.include_bbr }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-BBR"
-          [ "${{ inputs.include_ttl }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-TTL"
 
           ZIP_NAME="${KERNEL_NAME}-${DEVICE}-4.14-${TOOLCHAIN}${FEATURE_TAGS}-${DATE_TAG}.zip"
 
-          # 4. Pack ZIP tanpa wildcard './'
+          # 4. Pack ZIP
           zip -r9 "$ZIP_NAME" * -x ".git*" "README.md" "*.zip" "*.sha256"
           sha256sum "$ZIP_NAME" > "${ZIP_NAME}.sha256"
-
-          echo "=================================================="
-          echo "📦 Output Zip : $ZIP_NAME"
-          echo "🔑 SHA256 Hash: $(awk '{print $1}' "${ZIP_NAME}.sha256")"
-          echo "=================================================="
 
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
           echo "ZIP_PATH=AnyKernel3/$ZIP_NAME" >> $GITHUB_ENV
