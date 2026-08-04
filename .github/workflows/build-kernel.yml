@@ -424,53 +424,65 @@ jobs:
           echo "=================================================="
           ccache -s
 
-      - name: Package AnyKernel3 & Generate SHA256
-        run: |
-          if [ ! -d "AnyKernel3" ]; then
-            echo "📥 Cloning AnyKernel3 repository..."
-            git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
-          fi
+    - name: Package AnyKernel3 & Generate SHA256
+      run: |
+        if [ ! -d "AnyKernel3" ]; then
+          echo "📥 Cloning AnyKernel3 repository..."
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
+        fi
 
-          cd AnyKernel3
+        cd AnyKernel3
 
-          if [ -f "../kernel-source/out/arch/arm64/boot/Image.gz-dtb" ]; then
-            cp ../kernel-source/out/arch/arm64/boot/Image.gz-dtb .
-          elif [ -f "../kernel-source/out/arch/arm64/boot/Image.gz" ]; then
-            cp ../kernel-source/out/arch/arm64/boot/Image.gz .
-          else
-            echo "❌ Error: Image.gz / Image.gz-dtb file not found!"
-            exit 1
-          fi
+        # 1. Salin Kernel Image
+        if [ -f "../kernel-source/out/arch/arm64/boot/Image.gz-dtb" ]; then
+          cp ../kernel-source/out/arch/arm64/boot/Image.gz-dtb .
+        elif [ -f "../kernel-source/out/arch/arm64/boot/Image.gz" ]; then
+          cp ../kernel-source/out/arch/arm64/boot/Image.gz .
+        else
+          echo "❌ Error: Image.gz / Image.gz-dtb file not found!"
+          exit 1
+        fi
 
-          DATE_TAG=$(date +'%Y%m%d-%H%M')
-          KERNEL_NAME="LinuxxPU"
-          DEVICE="Camellia"
-          TOOLCHAIN="${{ inputs.toolchain }}"
+        # 2. Patch anykernel.sh Otomatis untuk Camellia (Fix Aborted)
+        sed -i 's/\r$//' anykernel.sh
+        sed -i 's/do.devicecheck=1/do.devicecheck=1/g' anykernel.sh
+        sed -i 's/device.name1=/device.name1=camellia/g' anykernel.sh
+        sed -i 's/device.name2=/device.name2=camellian/g' anykernel.sh
+        sed -i 's|block=auto;|block=/dev/block/by-name/boot;|g' anykernel.sh
+        sed -i 's/is_slot_device=auto;/is_slot_device=auto;/g' anykernel.sh
 
-          FEATURE_TAGS=""
-          [ -n "${{ inputs.ksu_fork }}" ] && FEATURE_TAGS="${FEATURE_TAGS}-${{ inputs.ksu_fork }}"
-          [ "${{ inputs.include_susfs }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-SUSFS"
-          [ "${{ inputs.include_bbg }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-BBG"
-          [ "${{ inputs.include_lto_o3 }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-LTO"
-          [ "${{ inputs.include_wireguard }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-WG"
-          [ "${{ inputs.include_f2fs }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-F2FS"
-          [ "${{ inputs.include_zstd }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-ZSTD"
-          [ "${{ inputs.include_bbr }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-BBR"
-          [ "${{ inputs.include_ttl }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-TTL"
+        # 3. Generate Nama ZIP
+        DATE_TAG=$(date +'%Y%m%d-%H%M')
+        KERNEL_NAME="LinuxxPU"
+        DEVICE="Camellia"
+        TOOLCHAIN="${{ inputs.toolchain }}"
 
-          ZIP_NAME="${KERNEL_NAME}-${DEVICE}-4.14-${TOOLCHAIN}${FEATURE_TAGS}-${DATE_TAG}.zip"
+        FEATURE_TAGS=""
+        [ -n "${{ inputs.ksu_fork }}" ] && FEATURE_TAGS="${FEATURE_TAGS}-${{ inputs.ksu_fork }}"
+        [ "${{ inputs.include_susfs }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-SUSFS"
+        [ "${{ inputs.include_bbg }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-BBG"
+        [ "${{ inputs.include_lto_o3 }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-LTO"
+        [ "${{ inputs.include_wireguard }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-WG"
+        [ "${{ inputs.include_f2fs }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-F2FS"
+        [ "${{ inputs.include_zstd }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-ZSTD"
+        [ "${{ inputs.include_bbr }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-BBR"
+        [ "${{ inputs.include_ttl }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-TTL"
 
-          zip -r9 "$ZIP_NAME" ./* -x ".git*" "README.md" "*.zip"
-          sha256sum "$ZIP_NAME" > "${ZIP_NAME}.sha256"
+        ZIP_NAME="${KERNEL_NAME}-${DEVICE}-4.14-${TOOLCHAIN}${FEATURE_TAGS}-${DATE_TAG}.zip"
 
-          echo "=================================================="
-          echo "📦 Output Zip : $ZIP_NAME"
-          echo "🔑 SHA256 Hash: $(awk '{print $1}' "${ZIP_NAME}.sha256")"
-          echo "=================================================="
+        # 4. Pack ZIP tanpa wildcard './' dan abaikan file tak terpakai
+        zip -r9 "$ZIP_NAME" * -x ".git*" "README.md" "*.zip" "*.sha256"
+        sha256sum "$ZIP_NAME" > "${ZIP_NAME}.sha256"
 
-          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
-          echo "ZIP_PATH=AnyKernel3/$ZIP_NAME" >> $GITHUB_ENV
-          echo "SHA256_PATH=AnyKernel3/${ZIP_NAME}.sha256" >> $GITHUB_ENV
+        echo "=================================================="
+        echo "📦 Output Zip : $ZIP_NAME"
+        echo "🔑 SHA256 Hash: $(awk '{print $1}' "${ZIP_NAME}.sha256")"
+        echo "=================================================="
+
+        echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+        echo "ZIP_PATH=AnyKernel3/$ZIP_NAME" >> $GITHUB_ENV
+        echo "SHA256_PATH=AnyKernel3/${ZIP_NAME}.sha256" >> $GITHUB_ENV
+        
 
       - name: Upload Kernel Artifacts
         uses: actions/upload-artifact@v4
