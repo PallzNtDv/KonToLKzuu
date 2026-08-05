@@ -401,11 +401,20 @@ jobs:
           grep -q "INODE_STATE_SUS_PATH" include/linux/susfs_def.h || echo "#define INODE_STATE_SUS_PATH (1 << 1)" >> include/linux/susfs_def.h
           grep -q "INODE_STATE_SUS_MOUNT" include/linux/susfs_def.h || echo "#define INODE_STATE_SUS_MOUNT (1 << 2)" >> include/linux/susfs_def.h
           grep -q "INODE_STATE_OPEN_REDIRECT" include/linux/susfs_def.h || echo "#define INODE_STATE_OPEN_REDIRECT (1 << 3)" >> include/linux/susfs_def.h
+          
+          # Makro khusus Mount Hiding di fs/namespace.c
+          grep -q "DEFAULT_SUS_MNT_ID" include/linux/susfs_def.h || echo "#define DEFAULT_SUS_MNT_ID 100000" >> include/linux/susfs_def.h
+          grep -q "DEFAULT_SUS_MNT_GROUP_ID" include/linux/susfs_def.h || echo "#define DEFAULT_SUS_MNT_GROUP_ID 100000" >> include/linux/susfs_def.h
+          grep -q "DEFAULT_SUS_MNT_ID_FOR_KSU_PROC_UNSHARE" include/linux/susfs_def.h || echo "#define DEFAULT_SUS_MNT_ID_FOR_KSU_PROC_UNSHARE 99999" >> include/linux/susfs_def.h
 
-          # 7. Memastikan fs/namei.c membaca header susfs_def.h
+          # 7. Memastikan fs/namei.c dan fs/namespace.c membaca header susfs_def.h
           if ! grep -q "linux/susfs_def.h" fs/namei.c; then
             echo "🔧 Injecting #include <linux/susfs_def.h> into fs/namei.c..."
             sed -i '1i#include <linux/susfs_def.h>' fs/namei.c
+          fi
+          if ! grep -q "linux/susfs_def.h" fs/namespace.c; then
+            echo "🔧 Injecting #include <linux/susfs_def.h> into fs/namespace.c..."
+            sed -i '1i#include <linux/susfs_def.h>' fs/namespace.c
           fi
 
           echo "✅ Header verification complete:"
