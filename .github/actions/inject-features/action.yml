@@ -60,25 +60,30 @@ runs:
         fi
 
         # -----------------------------------------------------------------
-        # 2. WireGuard Protocol (Using jury-rig.sh method)
+        # 2. WireGuard Protocol (Physical Copy - Fix Missing Kconfig)
         # -----------------------------------------------------------------
         if [ "${{ inputs.enable_wireguard }}" = "true" ]; then
           echo "🌐 Installing WireGuard..."
-          rm -rf /tmp/wireguard
+          rm -rf /tmp/wireguard net/wireguard
           git clone --depth=1 https://github.com/WireGuard/wireguard-linux-compat.git /tmp/wireguard
 
-          JURY_RIG="/tmp/wireguard/kernel-tree-scripts/jury-rig.sh"
-          
-          if [ -f "$JURY_RIG" ]; then
-            chmod +x "$JURY_RIG"
-            "$JURY_RIG" .
-            rm -rf /tmp/wireguard
-            echo "CONFIG_WIREGUARD=y" >> $DEFCONFIG
-            echo "✅ WireGuard successfully injected via jury-rig!"
-          else
-            echo "❌ Error: jury-rig.sh not found!"
-            exit 1
+          # Copy source WireGuard secara fisik ke net/wireguard
+          cp -r /tmp/wireguard/src net/wireguard
+
+          # Pastikan entri Kconfig terdaftar di net/Kconfig
+          if ! grep -q "wireguard" net/Kconfig; then
+            sed -i '/endmenu/i source "net/wireguard/Kconfig"' net/Kconfig || echo 'source "net/wireguard/Kconfig"' >> net/Kconfig
           fi
+
+          # Pastikan entri Makefile terdaftar di net/Makefile
+          if ! grep -q "wireguard" net/Makefile; then
+            echo 'obj-$(CONFIG_WIREGUARD) += wireguard/' >> net/Makefile
+          fi
+
+          # Hapus direktori temporary tanpa merusak net/wireguard
+          rm -rf /tmp/wireguard
+          echo "CONFIG_WIREGUARD=y" >> $DEFCONFIG
+          echo "✅ WireGuard successfully injected physically!"
         fi
 
         # -----------------------------------------------------------------
