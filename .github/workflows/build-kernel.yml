@@ -350,17 +350,17 @@ jobs:
           cd kernel-source
           echo "Applying SUSFS 4.14 Patch & Configs..."
           
-          # Buat folder jika belum ada
           mkdir -p ../patches/susfs_4.14
+          mkdir -p include/linux
 
-          # Unduh patch resmi 4.14 jika tidak ada file .patch lokal
+          # Unduh patch resmi 4.14 jika belum ada
           if [ -z "$(ls -A ../patches/susfs_4.14/*.patch 2>/dev/null)" ]; then
             echo "📥 Downloading SUSFS 4.14 patch directly from simonpunk GitLab..."
             curl -fLSs "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/kernel_patches/50_add_susfs_in_kernel-4.14.patch" \
               -o ../patches/susfs_4.14/50_add_susfs_in_kernel-4.14.patch 2>/dev/null || true
           fi
 
-          # 1. Eksekusi semua file .patch / .diff ke dalam source code kernel C
+          # 1. Eksekusi patch fisik ke dalam source code kernel C
           for patch_file in ../patches/susfs_4.14/*.patch ../patches/susfs_4.14/*.diff; do
             if [ -f "$patch_file" ]; then
               echo "🛠️ Applying patch: $patch_file"
@@ -368,12 +368,18 @@ jobs:
             fi
           done
 
-          # 2. Salin file header (susfs.h / susfs_def.h) jika ada folder include tambahan
-          if [ -d "../patches/susfs_4.14/include" ]; then
-            echo "📥 Copying SUSFS header files..."
-            cp -r ../patches/susfs_4.14/include/* include/ 2>/dev/null || true
-          fi
+          # 2. Paksa pengunduhan header susfs.h dan susfs_def.h ke include/linux/
+          echo "📥 Injecting required SUSFS headers into include/linux/..."
+          curl -fLSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/include/linux/susfs.h" -o include/linux/susfs.h
+          curl -fLSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/include/linux/susfs_def.h" -o include/linux/susfs_def.h
 
+          # Verifikasi ketersediaan file header
+          if [ ! -f "include/linux/susfs_def.h" ] || [ ! -f "include/linux/susfs.h" ]; then
+            echo "❌ Error: Failed to fetch SUSFS header files!"
+            exit 1
+          fi
+          echo "✅ SUSFS headers successfully placed in include/linux/"
+          
       - name: Inject Selected Kernel Features
         uses: ./.github/actions/inject-features
         with:
