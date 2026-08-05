@@ -52,27 +52,27 @@ runs:
         fi
 
         # -----------------------------------------------------------------
-        # 2. WireGuard Protocol (Dynamic Path Resolution)
+        # 2. WireGuard Protocol (Using jury-rig.sh method)
         # -----------------------------------------------------------------
         if [ "true" = "true" ]; then
           echo "🌐 Installing WireGuard..."
           rm -rf /tmp/wireguard
           git clone --depth=1 https://github.com/WireGuard/wireguard-linux-compat.git /tmp/wireguard
 
-          # Cari lokasi wireguard-import.sh secara dinamis
-          IMPORT_SCRIPT=$(find /tmp/wireguard -name "wireguard-import.sh" 2>/dev/null | head -n 1)
-
-          if [ -n "$IMPORT_SCRIPT" ] && [ -f "$IMPORT_SCRIPT" ]; then
-            chmod +x "$IMPORT_SCRIPT"
-            echo "📍 Found script at: $IMPORT_SCRIPT"
-            "$IMPORT_SCRIPT" .
+          JURY_RIG="/tmp/wireguard/kernel-tree-scripts/jury-rig.sh"
+          
+          if [ -f "$JURY_RIG" ]; then
+            chmod +x "$JURY_RIG"
+            
+            # Jalankan jury-rig untuk menyambungkan source wireguard ke direktori kernel saat ini (.)
+            # Format jury-rig.sh: ./jury-rig.sh <path-ke-kernel-source>
+            "$JURY_RIG" .
+            
             rm -rf /tmp/wireguard
             echo "CONFIG_WIREGUARD=y" >> $DEFCONFIG
-            echo "✅ WireGuard successfully injected!"
+            echo "✅ WireGuard successfully injected via jury-rig!"
           else
-            echo "❌ Error: wireguard-import.sh not found inside /tmp/wireguard!"
-            echo "📁 Listing /tmp/wireguard structure for debugging:"
-            find /tmp/wireguard -maxdepth 3 2>/dev/null || true
+            echo "❌ Error: jury-rig.sh not found!"
             exit 1
           fi
         fi
