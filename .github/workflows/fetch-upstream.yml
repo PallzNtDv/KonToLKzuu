@@ -37,6 +37,12 @@ jobs:
           elif [ "${{ inputs.ksu_fork }}" = "xxKSU" ]; then
             git clone -b master https://github.com/backslashxx/KernelSU KSU || git clone -b magic https://github.com/backslashxx/KernelSU KSU
             tag_ver='xxKSU'
+          elif [ "${{ inputs.ksu_fork }}" = "ReSuKISU" ]; then
+            git clone -b main https://github.com/rsuntk/ReSuKISU KSU || git clone -b master https://github.com/rsuntk/ReSuKISU KSU
+            tag_ver='ReSuKISU'
+          elif [ "${{ inputs.ksu_fork }}" = "KSU-Next" ] || [ "${{ inputs.ksu_fork }}" = "KSUnext" ]; then
+            git clone -b next https://github.com/rifs250/KernelSU-Next KSU || git clone -b main https://github.com/rifs250/KernelSU-Next KSU
+            tag_ver='KSU-Next'
           else
             git clone -b main https://github.com/tiann/KernelSU KSU || git clone -b master https://github.com/tiann/KernelSU KSU
             tag_ver='Official'
@@ -74,13 +80,15 @@ jobs:
           cd ..
           
           # Integrasi SUSFS jika aktif
-          if [ "${{ inputs.include_susfs }}" = "true" ] && [ "${{ inputs.ksu_fork }}" = "SUKISU" ]; then
-            cd KSU
-            git clone --depth 1 -b builtin https://github.com/ShirkNeko/SukiSU-Ultra susfs_tmp
-            rm -rf kernel
-            mv susfs_tmp/kernel .
-            rm -rf susfs_tmp
-            cd ..
+          if [ "${{ inputs.include_susfs }}" = "true" ]; then
+            if [ "${{ inputs.ksu_fork }}" = "SUKISU" ]; then
+              cd KSU
+              git clone --depth 1 -b builtin https://github.com/ShirkNeko/SukiSU-Ultra susfs_tmp
+              rm -rf kernel
+              mv susfs_tmp/kernel .
+              rm -rf susfs_tmp
+              cd ..
+            fi
           fi
 
           # Pindahkan hasil fetch ke root directory
@@ -124,6 +132,14 @@ jobs:
 
           for file in $(grep -R "${repo_folder}" -e 'com.sukisu.ultra' 2>/dev/null | cut -d':' -f1 | sort | uniq); do 
             sed -E -i 's|(com.)sukisu(.)ultra|\1ahmad\2linuxxpu|g' $file
+          done
+
+          for file in $(grep -R "${repo_folder}" -e 'com.rsuntk.resukisu' 2>/dev/null | cut -d':' -f1 | sort | uniq); do 
+            sed -E -i 's|(com.)rsuntk(.)resukisu|\1ahmad\2linuxxpu|g' $file
+          done
+
+          for file in $(grep -R "${repo_folder}" -e 'rifs250.kernelsunext' 2>/dev/null | cut -d':' -f1 | sort | uniq); do 
+            sed -E -i 's|(com.)rifs250(.)kernelsunext|\1ahmad\2linuxxpu|g' $file
           done
 
           # 4. Injeksi Key Hash Manager Baru ke Makefile Kernel
