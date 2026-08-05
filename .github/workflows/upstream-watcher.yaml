@@ -1,4 +1,4 @@
-Name: Flexible Upstream Dependency Watcher
+name: Flexible Upstream Dependency Watcher
 
 on:
   schedule:
