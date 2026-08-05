@@ -252,10 +252,21 @@ jobs:
           
           if [ -d "kernel-source" ]; then
             cd kernel-source
+            # 1. Buat changelog 5 commit terakhir
             git log -n 5 --pretty=format:"* %s" > ../output_meta/changelog.txt
             
-            REPO_URL=$(git config --get remote.origin.url \vert{} sed 's/\.git$//' | sed 's|git@github.com:|https://github.com/|')
-            COMMIT_LINK="${REPO_URL}/commits"
+            # 2. Dapatkan URL Repository Kernel dan ubah format SSH/Git ke HTTPS
+            REPO_URL=$(git config --get remote.origin.url | sed 's/\.git$//' | sed 's|git@github.com:|https://github.com/|')
+            
+            # 3. Dapatkan nama branch aktif (dengan fallback ke manifest_name jika detached HEAD)
+            BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
+            if [ "$BRANCH_NAME" = "HEAD" ]; then
+              BRANCH_NAME="${{ inputs.manifest_name }}"
+              BRANCH_NAME="${BRANCH_NAME%.xml}"
+            fi
+
+            # 4. Susun link lengkap yang mengarah ke branch spesifik
+            COMMIT_LINK="${REPO_URL}/commits/${BRANCH_NAME}"
             echo "$COMMIT_LINK" > ../output_meta/commit_link.txt
             cd ..
           else
