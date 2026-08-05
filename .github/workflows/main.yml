@@ -38,6 +38,11 @@ on:
         required: true
         type: boolean
         default: true
+      include_droidspace:
+        description: 'Enable DroidSpace & OverlayFS (Mountify / Magic Mount)'
+        required: true
+        type: boolean
+        default: true
       include_bbg:
         description: 'Include Baseband-Guard (BBG)'
         required: true
@@ -108,6 +113,7 @@ jobs:
       ksu_fork: ${{ inputs.ksu_fork }}
       manifest_name: ${{ inputs.manifest_name }}
       include_susfs: ${{ inputs.include_susfs }}
+      include_droidspace: ${{ inputs.include_droidspace }}
       include_bbg: ${{ inputs.include_bbg }}
       toolchain: ${{ inputs.toolchain }}
       include_lto_o3: ${{ inputs.include_lto_o3 }}
