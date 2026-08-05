@@ -53,9 +53,9 @@ permissions:
   contents: write
 
 jobs:
-  # =========================================================================
-  # JOB 1: BUILD KERNEL
-  # =========================================================================
+# =========================================================================
+# JOB 1: BUILD KERNEL
+# =========================================================================
   build-kernel:
     if: inputs.build_target == 'both' || inputs.build_target == 'kernel_only'
     runs-on: ubuntu-latest
@@ -318,9 +318,9 @@ jobs:
             cp -r ../patches/susfs_4.14/* .
           fi
 
-      # -----------------------------------------------------------------
-      # INJEKSI FITUR ADVANCED (Termasuk DroidSpace & SUSFS)
-      # -----------------------------------------------------------------
+# -----------------------------------------------------------------
+# ADVANCED FEATURE INJECTION (Including DroidSpace & SUSFS)name: 
+# -----------------------------------------------------------------
       - name: Inject Selected Kernel Features
         uses: ./.github/actions/inject-features
         with:
@@ -599,71 +599,19 @@ jobs:
             exit 1
           fi
 
-          GRADLE_DIR=$(dirname "$GW_FILE")
-          echo "✅ Gradle project location found at: $GRADLE_DIR"
-          cd "$GRADLE_DIR"
-          chmod +x gradlew
-          ./gradlew :app:assembleRelease --no-daemon
-
-      - name: Organize APK Artifact
-        run: |
-          mkdir -p output_apk
-
-          if [ ! -d "manager-src" ]; then
-            echo "❌ Error: Directory 'manager-src' not found! Previous clone step might have failed."
-            exit 1
-          fi
-
-          APK_FILE=$(find manager-src -name "*.apk" | grep -i "release" | head -n 1)
-
-          if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
-            echo "✅ APK found at: $APK_FILE"
-            cp "$APK_FILE" "output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk"
-          else
-            echo "❌ Error: Compiled APK file not found!"
-            exit 1
-          fi
-
+# -------------------------------------------------------------------------
+# IMPORTANT STEP: Upload APK so that it can be downloaded by Telegram Job / Release
+# -------------------------------------------------------------------------
       - name: Upload Manager APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: manager-assets
-          path: "output_apk/${{ inputs.ksu_fork }}-Manager-Release.apk"
-
-      - name: Send Telegram Failure Notification (Manager)
-        if: failure()
-        env:
-          TELEGRAM_TOKEN: "${{ secrets.TELEGRAM_TOKEN }}"
-          TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
-          KSU: "${{ inputs.ksu_fork }}"
-        run: |
-          python3 << 'EOF'
-          import os, urllib.request, urllib.parse
-          token = os.environ.get("TELEGRAM_TOKEN")
-          chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-          ksu = os.environ.get("KSU", "")
-
-          if token and chat_id:
-              text = f"❌ *Manager Build Failed!*\n⚙️ *Fork:* {ksu}"
-              data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode()
-              req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
-              try:
-                  urllib.request.urlopen(req)
-              except Exception as e:
-                  print("Telegram notification error:", e)
-          EOF
-
-      - name: Cancel Entire Workflow on Failure
-        if: failure()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "❌ Manager build failed! Cancelling entire workflow..."
-          gh run cancel ${{ github.run_id }}
+          name: manager-apk-artifact
+          path: output_apk/
+          retention-days: 1
   
-  # =========================================================================
-  # JOB 3: PUBLISH TO GITHUB RELEASES & TELEGRAM
-  # =========================================================================
+# =========================================================================
+# JOB 3: PUBLISH TO GITHUB RELEASES & TELEGRAM
+# =========================================================================
   publish-release:
     needs: [build-kernel, build-manager]
     if: |
