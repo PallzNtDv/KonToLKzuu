@@ -278,11 +278,11 @@ jobs:
         run: |
           cd kernel-source
 
-          # Helper function untuk melakukan clone & injeksi manual jika setup.sh remote 404
+          # Helper function untuk manual clone & injeksi Kconfig/Makefile
           inject_ksu_manual() {
             local repo_url="$1"
             local branch="${2:-main}"
-            echo "📥 Fallback: Injecting KernelSU directly from $repo_url (Branch: $branch)..."
+            echo "📥 Injecting KernelSU directly from $repo_url (Branch: $branch)..."
             rm -rf drivers/kernelsu
             git clone --depth=1 -b "$branch" "$repo_url" drivers/kernelsu || git clone --depth=1 "$repo_url" drivers/kernelsu
             
@@ -294,35 +294,40 @@ jobs:
             fi
           }
 
-          if [ "${{ inputs.ksu_fork }}" = "xxKSU" ]; then
-            echo "🚀 Setting up xxKSU..."
-            curl -fLSs "https://raw.githubusercontent.com/backslashxx/KernelSU/main/kernel/setup.sh" | bash -s main || \
-            inject_ksu_manual "https://github.com/backslashxx/KernelSU.git" "main"
+          # Helper function untuk mendownload setup.sh dan menangani fallback jika 404
+          run_ksu_setup() {
+            local setup_url="$1"
+            local branch="$2"
+            local repo_url="$3"
 
-          elif [ "${{ inputs.ksu_fork }}" = "SUKISU" ]; then
-            echo "🚀 Setting up SUKISU..."
-            curl -fLSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main || \
-            inject_ksu_manual "https://github.com/SukiSU-Ultra/SukiSU-Ultra.git" "main"
+            if curl -fLSs "$setup_url" -o /tmp/ksu_setup.sh 2>/dev/null; then
+              echo "🚀 Executing setup.sh from $setup_url..."
+              bash /tmp/ksu_setup.sh "$branch"
+              rm -f /tmp/ksu_setup.sh
+            else
+              echo "⚠️ setup.sh tidak ditemukan (404), beralih ke manual clone..."
+              inject_ksu_manual "$repo_url" "$branch"
+            fi
+          }
 
-          elif [ "${{ inputs.ksu_fork }}" = "ReSuKISU" ]; then
-            echo "🚀 Setting up ReSuKISU..."
-            curl -fLSs "https://raw.githubusercontent.com/rsuntk/ReSuKISU/main/kernel/setup.sh" | bash -s main || \
-            inject_ksu_manual "https://github.com/rsuntk/ReSuKISU.git" "main"
+          FORK="${{ inputs.ksu_fork }}"
+          echo "⚙️ Processing KSU Fork: $FORK"
 
-          elif [ "${{ inputs.ksu_fork }}" = "KSU-Next" ]; then
-            echo "🚀 Setting up KernelSU-Next..."
-            curl -fLSs "https://raw.githubusercontent.com/rifs28/KernelSU-Next/next/kernel/setup.sh" | bash -s next || \
-            inject_ksu_manual "https://github.com/rifs28/KernelSU-Next.git" "next"
-
+          if [ "$FORK" = "xxKSU" ]; then
+            run_ksu_setup "https://raw.githubusercontent.com/backslashxx/KernelSU/main/kernel/setup.sh" "main" "https://github.com/backslashxx/KernelSU.git"
+          elif [ "$FORK" = "SUKISU" ]; then
+            run_ksu_setup "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" "main" "https://github.com/SukiSU-Ultra/SukiSU-Ultra.git"
+          elif [ "$FORK" = "ReSuKISU" ]; then
+            run_ksu_setup "https://raw.githubusercontent.com/rsuntk/ReSuKISU/main/kernel/setup.sh" "main" "https://github.com/rsuntk/ReSuKISU.git"
+          elif [ "$FORK" = "KSU-Next" ]; then
+            run_ksu_setup "https://raw.githubusercontent.com/rifs28/KernelSU-Next/next/kernel/setup.sh" "next" "https://github.com/rifs28/KernelSU-Next.git"
           else
-            echo "🚀 Setting up Official KernelSU..."
-            curl -fLSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main || \
-            inject_ksu_manual "https://github.com/tiann/KernelSU.git" "main"
+            run_ksu_setup "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" "main" "https://github.com/tiann/KernelSU.git"
           fi
 
-          # Validasi apakah folder drivers/kernelsu berhasil dibuat
+          # Validasi keberadaan folder drivers/kernelsu
           if [ ! -d "drivers/kernelsu" ]; then
-            echo "❌ Error: KernelSU directory not found! Setup script failed."
+            echo "❌ Error: KernelSU directory not found! Setup failed."
             exit 1
           fi
 
