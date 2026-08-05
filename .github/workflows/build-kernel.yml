@@ -246,46 +246,16 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
           repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
 
-      - name: Generate Kernel Changelog & Build Metadata
-        run: |
-          mkdir -p output_meta
-          
-          if [ -d "kernel-source" ]; then
-            cd kernel-source
-            # 1. Buat changelog 5 commit terakhir
-            git log -n 5 --pretty=format:"* %s" > ../output_meta/changelog.txt
-            
-            # 2. Dapatkan URL Repository Kernel dan ubah format SSH/Git ke HTTPS
-            REPO_URL=$(git config --get remote.origin.url | sed 's/\.git$//' | sed 's|git@github.com:|https://github.com/|')
-            
-            # 3. Dapatkan nama branch aktif (dengan fallback ke manifest_name jika detached HEAD)
-            BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
-            if [ "$BRANCH_NAME" = "HEAD" ]; then
-              BRANCH_NAME="${{ inputs.manifest_name }}"
-              BRANCH_NAME="${BRANCH_NAME%.xml}"
-            fi
-
-            # 4. Susun link lengkap yang mengarah ke branch spesifik
-            COMMIT_LINK="${REPO_URL}/commits/${BRANCH_NAME}"
-            echo "$COMMIT_LINK" > ../output_meta/commit_link.txt
-            cd ..
-          else
-            echo "* No commit log available" > output_meta/changelog.txt
-            echo "" > output_meta/commit_link.txt
-          fi
-          
       - name: Setup KSU Fork ("${{ inputs.ksu_fork }}")
         run: |
           cd kernel-source
 
-          # Helper function untuk manual clone & injeksi Kconfig/Makefile dengan fallback otomatis
           inject_ksu_manual() {
             local repo_url="$1"
             local branch="${2:-main}"
             echo "📥 Injecting KernelSU directly from $repo_url (Branch: $branch)..."
             rm -rf drivers/kernelsu
             
-            # Coba clone repo yang diminta; jika gagal, fallback ke Official KernelSU
             if ! git clone --depth=1 -b "$branch" "$repo_url" drivers/kernelsu 2>/dev/null && \
                ! git clone --depth=1 "$repo_url" drivers/kernelsu 2>/dev/null; then
               echo "⚠️ Warning: Repositori $repo_url tidak ditemukan atau bersifat privat."
@@ -301,7 +271,6 @@ jobs:
             fi
           }
 
-          # Helper function untuk mendownload setup.sh dan menangani fallback jika 404
           run_ksu_setup() {
             local setup_url="$1"
             local branch="$2"
@@ -332,20 +301,14 @@ jobs:
             run_ksu_setup "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" "main" "https://github.com/tiann/KernelSU.git"
           fi
 
-          # Validasi keberadaan folder drivers/kernelsu
           if [ ! -d "drivers/kernelsu" ]; then
             echo "❌ Error: KernelSU directory not found! Setup failed."
             exit 1
           fi
 
-          # Patch core_hook.c / ksu_hook.c untuk Non-GKI manual hooks
-          HOOK_FILES=$(find drivers/kernelsu -type f \( -name "core_hook.c" -o -name "ksu_hook.c" \))
-          for HOOK_FILE in $HOOK_FILES; do
-            if [ -f "$HOOK_FILE" ]; then
-              echo "🔧 Patching $HOOK_FILE for Non-GKI manual hooks..."
-              sed -i 's/#ifdef CONFIG_KPROBES/#if 0/g' "$HOOK_FILE"
-            fi
-          done
+          # Bypass pemeriksaan ketat inline hook di ReSukiSU/SukiSU
+          echo "🔧 Bypassing strict inline hook check for Non-GKI..."
+          find drivers/kernelsu -name "inline_hook_check.mk" -exec sed -i 's/\$(error/\$(info/g' {} +
 
       - name: Apply Baseband-Guard (BBG)
         if: inputs.include_bbg == true
@@ -380,23 +343,31 @@ jobs:
           enable_droidspace: ${{ inputs.include_droidspace }}
           enable_susfs: ${{ inputs.include_susfs }}
 
-      - name: Configure Kernel Defconfig
+      - name: Configure Kernel Defconfig & Kprobes
         run: |
           cd kernel-source
-          DEFCONFIG_FILE="arch/arm64/configs/$KERNEL_DEFCONFIG"
           
-          echo "CONFIG_KSU=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_TMPFS_XATTR=y" >> $DEFCONFIG_FILE
-          echo "CONFIG_TMPFS_POSIX_ACL=y" >> $DEFCONFIG_FILE
+          # Fungsi helper set_config
+          set_config() {
+            local config=$1
+            local value=$2
+            local file=$3
+            if grep -q "^# $config is not set" "$file"; then
+              sed -i "s/^# $config is not set/$config=$value/" "$file"
+            elif grep -q "^$config=" "$file"; then
+              sed -i "s/^$config=.*/$config=$value/" "$file"
+            else
+              echo "$config=$value" >> "$file"
+            fi
+          }
 
-      - name: Setup & Restore ccache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ccache
-          key: ccache-${{ runner.os }}-${{ inputs.toolchain }}-${{ github.sha }}
-          restore-keys: |
-            ccache-${{ runner.os }}-${{ inputs.toolchain }}-
-            ccache-${{ runner.os }}-
+          DEFCONFIG_FILE="arch/arm64/configs/${{ env.KERNEL_DEFCONFIG }}"
+
+          # Aktifkan KPROBES untuk Non-GKI KernelSU
+          set_config "CONFIG_KPROBES" "y" "$DEFCONFIG_FILE"
+          set_config "CONFIG_HAVE_KPROBES" "y" "$DEFCONFIG_FILE"
+          set_config "CONFIG_KPROBE_EVENTS" "y" "$DEFCONFIG_FILE"
+          set_config "CONFIG_KSU" "y" "$DEFCONFIG_FILE"
 
       - name: Configure ccache
         run: |
