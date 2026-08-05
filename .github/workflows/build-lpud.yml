@@ -1,4 +1,4 @@
-Name: Build lpud Binary
+name: Build lpud Binary
 
 on:
   workflow_dispatch:
