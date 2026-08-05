@@ -298,10 +298,8 @@ jobs:
             mv KernelSU drivers/kernelsu
           fi
 
-          # Buat struktur minimal jika direktori masih kosong
           mkdir -p drivers/kernelsu
 
-          # Cek & pastikan Kconfig tersedia agar make defconfig tidak error
           if [ ! -f "drivers/kernelsu/Kconfig" ]; then
             echo "⚠️ drivers/kernelsu/Kconfig missing, creating dummy Kconfig..."
             echo 'config KERNELSU' > drivers/kernelsu/Kconfig
@@ -309,11 +307,9 @@ jobs:
             echo '	default y' >> drivers/kernelsu/Kconfig
           fi
 
-          # Normalisasi dan bersihkan referensi Kconfig lama dari setup.sh
           sed -i 's|source "KernelSU/Kconfig"|source "drivers/kernelsu/Kconfig"|g' drivers/Kconfig
           sed -i 's|source "drivers/KernelSU/Kconfig"|source "drivers/kernelsu/Kconfig"|g' drivers/Kconfig
 
-          # Inject source Kconfig (sebelum endmenu) & Makefile hanya jika belum terinjeksi
           if ! grep -q "drivers/kernelsu/Kconfig" drivers/Kconfig; then
             sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
           fi
@@ -321,20 +317,22 @@ jobs:
             echo 'obj-y += kernelsu/' >> drivers/Makefile
           fi
 
-          # Bypass pengecekan error Kbuild/Makefile
           echo "🔧 Bypassing strict checks..."
           find -L drivers/kernelsu -type f \( -name "Kbuild" -o -name "*.mk" -o -name "Makefile" \) 2>/dev/null -exec sed -i 's/\$(error/\$(info/g' {} + || true
 
-          # Sinkronisasi header SUSFS
+          # Pastikan file header susfs disalin langsung ke include/linux
           mkdir -p include/linux
-          if [ -d "drivers/kernelsu/kernel/include/linux" ]; then
-            cp -rf drivers/kernelsu/kernel/include/linux/susfs*.h include/linux/ 2>/dev/null || true
-          elif [ -d "drivers/kernelsu/include/linux" ]; then
-            cp -rf drivers/kernelsu/include/linux/susfs*.h include/linux/ 2>/dev/null || true
+          cp -rf drivers/kernelsu/kernel/include/linux/susfs*.h include/linux/ 2>/dev/null || true
+          cp -rf drivers/kernelsu/include/linux/susfs*.h include/linux/ 2>/dev/null || true
+
+          # Fallback unduhan jika file susfs.h atau susfs_def.h belum ada
+          if [ ! -f "include/linux/susfs.h" ]; then
+            echo "📥 Fetching missing susfs.h..."
+            curl -fLSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/include/linux/susfs.h" -o include/linux/susfs.h 2>/dev/null || true
           fi
 
           if [ ! -f "include/linux/susfs_def.h" ] || ! grep -q "CMD_SUSFS_ADD_SUS_PATH_LOOP" include/linux/susfs_def.h 2>/dev/null; then
-            curl -fLSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/include/linux/susfs.h" -o include/linux/susfs.h 2>/dev/null || true
+            echo "📥 Fetching missing susfs_def.h..."
             curl -fLSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/include/linux/susfs_def.h" -o include/linux/susfs_def.h 2>/dev/null || true
           fi
 
