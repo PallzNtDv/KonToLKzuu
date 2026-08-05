@@ -278,26 +278,46 @@ jobs:
         run: |
           cd kernel-source
 
+          # Helper function untuk melakukan clone & injeksi manual jika setup.sh remote 404
+          inject_ksu_manual() {
+            local repo_url="$1"
+            local branch="${2:-main}"
+            echo "📥 Fallback: Injecting KernelSU directly from $repo_url (Branch: $branch)..."
+            rm -rf drivers/kernelsu
+            git clone --depth=1 -b "$branch" "$repo_url" drivers/kernelsu || git clone --depth=1 "$repo_url" drivers/kernelsu
+            
+            if ! grep -q "kernelsu" drivers/Kconfig; then
+              sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+            fi
+            if ! grep -q "kernelsu" drivers/Makefile; then
+              echo 'obj-y += kernelsu/' >> drivers/Makefile
+            fi
+          }
+
           if [ "${{ inputs.ksu_fork }}" = "xxKSU" ]; then
             echo "🚀 Setting up xxKSU..."
             curl -fLSs "https://raw.githubusercontent.com/backslashxx/KernelSU/main/kernel/setup.sh" | bash -s main || \
-            curl -fLSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s master
+            inject_ksu_manual "https://github.com/backslashxx/KernelSU.git" "main"
+
           elif [ "${{ inputs.ksu_fork }}" = "SUKISU" ]; then
             echo "🚀 Setting up SUKISU..."
             curl -fLSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main || \
-            curl -fLSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/master/kernel/setup.sh" | bash -s master
+            inject_ksu_manual "https://github.com/SukiSU-Ultra/SukiSU-Ultra.git" "main"
+
           elif [ "${{ inputs.ksu_fork }}" = "ReSuKISU" ]; then
             echo "🚀 Setting up ReSuKISU..."
             curl -fLSs "https://raw.githubusercontent.com/rsuntk/ReSuKISU/main/kernel/setup.sh" | bash -s main || \
-            curl -fLSs "https://raw.githubusercontent.com/rsuntk/ReSuKISU/master/kernel/setup.sh" | bash -s master
+            inject_ksu_manual "https://github.com/rsuntk/ReSuKISU.git" "main"
+
           elif [ "${{ inputs.ksu_fork }}" = "KSU-Next" ]; then
             echo "🚀 Setting up KernelSU-Next..."
             curl -fLSs "https://raw.githubusercontent.com/rifs28/KernelSU-Next/next/kernel/setup.sh" | bash -s next || \
-            curl -fLSs "https://raw.githubusercontent.com/rifs28/KernelSU-Next/main/kernel/setup.sh" | bash -s main
+            inject_ksu_manual "https://github.com/rifs28/KernelSU-Next.git" "next"
+
           else
             echo "🚀 Setting up Official KernelSU..."
             curl -fLSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main || \
-            curl -fLSs "https://raw.githubusercontent.com/tiann/KernelSU/master/kernel/setup.sh" | bash -s master
+            inject_ksu_manual "https://github.com/tiann/KernelSU.git" "main"
           fi
 
           # Validasi apakah folder drivers/kernelsu berhasil dibuat
@@ -314,17 +334,6 @@ jobs:
               sed -i 's/#ifdef CONFIG_KPROBES/#if 0/g' "$HOOK_FILE"
             fi
           done
-
-      - name: Apply Manual Hooks for Official KSU (4.14 Non-GKI)
-        if: inputs.ksu_fork == 'Official'
-        run: |
-          cd kernel-source
-          echo "Applying Manual Hooks for Official KSU on 4.14..."
-          grep -q "kernelsu" drivers/Makefile || echo "obj-y += kernelsu/" >> drivers/Makefile
-          grep -q "kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
-          if [ -f "../patches/ksu_manual_hooks_4.14.patch" ]; then
-            patch -p1 < ../patches/ksu_manual_hooks_4.14.patch
-          fi
 
       - name: Apply Baseband-Guard (BBG)
         if: inputs.include_bbg == true
