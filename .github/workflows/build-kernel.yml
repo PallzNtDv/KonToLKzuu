@@ -361,7 +361,7 @@ jobs:
           fi
 
           # Bersihkan file patch jika terunduh sebagai HTML (404)
-          if grep -q -i "<!DOCTYPE" ../patches/susfs_4.14/*.patch 2>/dev/null; then
+          if grep -q -i "<!DOCTYPE" ../patches/susfs_4.14/*.patch 2>/dev/null || grep -q -i "<html" ../patches/susfs_4.14/*.patch 2>/dev/null; then
             rm -f ../patches/susfs_4.14/*.patch
           fi
 
@@ -373,16 +373,23 @@ jobs:
             fi
           done
 
-          # 3. FIX: Pastikan fs/susfs.c ada di tempatnya
+          # 3. FIX: Pembersihan & Verifikasi fs/susfs.c agar tidak terisi HTML
           echo "📥 Verifying fs/susfs.c..."
+          if [ -f "fs/susfs.c" ]; then
+            if grep -q -i "<!DOCTYPE" fs/susfs.c 2>/dev/null || grep -q -i "<html" fs/susfs.c 2>/dev/null; then
+              echo "⚠️ fs/susfs.c is corrupted with HTML content, deleting..."
+              rm -f fs/susfs.c
+            fi
+          fi
+
           if [ ! -f "fs/susfs.c" ]; then
-            echo "⚠️ fs/susfs.c missing after patch! Searching local repository..."
-            find . -type f -name "susfs.c" -exec cp {} fs/susfs.c \; 2>/dev/null || true
+            echo "🔍 Searching local repository for fs/susfs.c..."
+            find . -type f -name "susfs.c" ! -path "./fs/susfs.c" -exec cp {} fs/susfs.c \; 2>/dev/null || true
           fi
 
           if [ ! -f "fs/susfs.c" ] || grep -q -i "<!DOCTYPE" fs/susfs.c 2>/dev/null; then
-            echo "📥 Downloading fs/susfs.c directly from SuSFS repository..."
-            curl -sSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/fs/susfs.c" -o fs/susfs.c || true
+            echo "📥 Downloading fs/susfs.c from fallback GitHub mirror..."
+            curl -sSL "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/fs/susfs.c" -o fs/susfs.c || true
           fi
 
           # 4. Cari dan salin header susfs dari seluruh direktori project
@@ -390,9 +397,9 @@ jobs:
           find . -type f -name "susfs.h" -exec cp {} include/linux/ \; 2>/dev/null || true
           find . -type f -name "susfs_def.h" -exec cp {} include/linux/ \; 2>/dev/null || true
 
-          # 5. Unduh header jika belum ada atau rusak
+          # 5. Unduh header jika belum ada atau terinfeksi HTML
           if [ ! -f "include/linux/susfs.h" ] || grep -q -i "<!DOCTYPE" include/linux/susfs.h 2>/dev/null; then
-            curl -sSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/include/linux/susfs.h" -o include/linux/susfs.h || true
+            curl -sSL "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/include/linux/susfs.h" -o include/linux/susfs.h || true
           fi
 
           if [ ! -f "include/linux/susfs_def.h" ] || grep -q -i "<!DOCTYPE" include/linux/susfs_def.h 2>/dev/null; then
@@ -427,7 +434,7 @@ jobs:
           done
 
           echo "✅ Verification complete:"
-          ls -l fs/susfs.c include/linux/susfs*.h
+          head -n 5 fs/susfs.c || true
           
       - name: Inject Selected Kernel Features
         uses: ./.github/actions/inject-features
