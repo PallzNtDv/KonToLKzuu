@@ -335,6 +335,14 @@ jobs:
             echo "📥 Fetching missing susfs_def.h..."
             curl -fLSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/include/linux/susfs_def.h" -o include/linux/susfs_def.h 2>/dev/null || true
           fi
+          
+      - name: Apply Baseband-Guard (BBG)
+        if: inputs.include_bbg == true
+        run: |
+          cd kernel-source
+          echo "Applying Baseband-guard..."
+          wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash || true
+          echo "CONFIG_BBG=y" >> arch/arm64/configs/$KERNEL_DEFCONFIG
 
       - name: Apply SUSFS Patch & Configs
         if: inputs.include_susfs == true
