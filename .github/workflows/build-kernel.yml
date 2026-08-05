@@ -341,7 +341,21 @@ jobs:
           cd kernel-source
           echo "Applying SUSFS 4.14 Patch & Configs..."
           if [ -d "../patches/susfs_4.14" ]; then
-            cp -r ../patches/susfs_4.14/* .
+            # 1. Eksekusi semua file .patch / .diff ke dalam source code kernel
+            for patch_file in ../patches/susfs_4.14/*.patch ../patches/susfs_4.14/*.diff; do
+              if [ -f "$patch_file" ]; then
+                echo "🛠️ Applying patch: $patch_file"
+                patch -p1 < "$patch_file" || git apply "$patch_file" || true
+              fi
+            done
+
+            # 2. Salin file header (susfs.h / susfs_def.h) jika ada folder include di dalam patches
+            if [ -d "../patches/susfs_4.14/include" ]; then
+              echo "📥 Copying SUSFS header files..."
+              cp -r ../patches/susfs_4.14/include/* include/ 2>/dev/null || true
+            fi
+          else
+            echo "⚠️ Warning: Folder ../patches/susfs_4.14 tidak ditemukan!"
           fi
 
       - name: Inject Selected Kernel Features
