@@ -554,6 +554,10 @@ jobs:
             clone_repo "https://github.com/SukiSU-Ultra/SukiSU-Manager.git" || \
             clone_repo "https://github.com/SukiSU-Ultra/SukiSU-Ultra.git" || \
             clone_repo "https://github.com/tiann/KernelSU.git"
+          elif [ "${{ inputs.ksu_fork }}" = "ReSuKISU" ]; then
+            echo "Cloning ReSuKISU Manager..."
+            clone_repo "https://github.com/rsuntk/ReSuKISU.git" || \
+            clone_repo "https://github.com/tiann/KernelSU.git"
           elif [ "${{ inputs.ksu_fork }}" = "KSU-Next" ]; then
             echo "Cloning KernelSU-Next Manager..."
             clone_repo "https://github.com/rifs28/KernelSU-Next.git" || \
