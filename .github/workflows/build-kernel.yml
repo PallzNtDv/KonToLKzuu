@@ -355,9 +355,15 @@ jobs:
 
           # 1. Unduh patch resmi 4.14 jika belum ada
           if [ -z "$(ls -A ../patches/susfs_4.14/*.patch 2>/dev/null)" ]; then
-            echo "📥 Downloading SUSFS 4.14 patch directly from simonpunk GitLab..."
+            echo "📥 Downloading SUSFS 4.14 patch..."
             curl -sSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/kernel_patches/50_add_susfs_in_kernel-4.14.patch" \
               -o ../patches/susfs_4.14/50_add_susfs_in_kernel-4.14.patch || true
+          fi
+
+          # Bersihkan file patch jika terunduh sebagai halaman HTML
+          if grep -q -i "<!DOCTYPE" ../patches/susfs_4.14/*.patch 2>/dev/null; then
+            echo "⚠️ File patch terunduh sebagai HTML 404, membersihkan..."
+            rm -f ../patches/susfs_4.14/*.patch
           fi
 
           # 2. Eksekusi patch ke dalam source code kernel C
@@ -368,29 +374,35 @@ jobs:
             fi
           done
 
-          # 3. Cari dan salin header dari folder driver KSU / ReSukiSU yang sudah ada
-          echo "📥 Injecting required SUSFS headers into include/linux/..."
+          # 3. Cari dan salin header susfs dari folder driver KSU / ReSukiSU lokal
+          echo "📥 Copying SUSFS headers from local driver source..."
           find drivers/ -name "susfs.h" -exec cp {} include/linux/ \; 2>/dev/null || true
           find drivers/ -name "susfs_def.h" -exec cp {} include/linux/ \; 2>/dev/null || true
 
-          # 4. Unduh susfs.h jika belum ada
-          if [ ! -f "include/linux/susfs.h" ]; then
+          # 4. Unduh fallback jika header belum ada di include/linux/
+          if [ ! -f "include/linux/susfs.h" ] || grep -q -i "<!DOCTYPE" include/linux/susfs.h 2>/dev/null; then
+            echo "📥 Fetching susfs.h from raw repository..."
             curl -sSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/include/linux/susfs.h" -o include/linux/susfs.h || true
           fi
 
-          # 5. Buat susfs_def.h otomatis jika tidak ditemukan di remote/local
-          if [ ! -f "include/linux/susfs_def.h" ]; then
-            if [ -f "include/linux/susfs.h" ]; then
+          # 5. Jika susfs_def.h tidak ada atau berisi HTML, buat dari susfs.h
+          if [ ! -f "include/linux/susfs_def.h" ] || grep -q -i "<!DOCTYPE" include/linux/susfs_def.h 2>/dev/null; then
+            echo "⚙️ Generating valid susfs_def.h..."
+            if [ -f "include/linux/susfs.h" ] && ! grep -q -i "<!DOCTYPE" include/linux/susfs.h; then
               cp include/linux/susfs.h include/linux/susfs_def.h
-            else
-              echo "#ifndef _SUSFS_DEF_H" > include/linux/susfs_def.h
-              echo "#define _SUSFS_DEF_H" >> include/linux/susfs_def.h
-              echo "#endif" >> include/linux/susfs_def.h
             fi
           fi
 
-          echo "✅ Header verification complete:"
-          ls -l include/linux/susfs*.h
+          # Hapus file header jika masih mengandung HTML
+          for h in include/linux/susfs.h include/linux/susfs_def.h; do
+            if grep -q -i "<!DOCTYPE" "$h" 2>/dev/null; then
+              rm -f "$h"
+            fi
+          done
+
+          echo "✅ Header check complete. Verification preview:"
+          head -n 5 include/linux/susfs.h 2>/dev/null || echo "susfs.h missing"
+          head -n 5 include/linux/susfs_def.h 2>/dev/null || echo "susfs_def.h missing"
           
       - name: Inject Selected Kernel Features
         uses: ./.github/actions/inject-features
