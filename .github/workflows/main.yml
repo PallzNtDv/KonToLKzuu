@@ -30,9 +30,9 @@ on:
         options:
           - lotus-kernel
           - camellia
-          - vortex-test
+          - lotus-test
           - vortex-v1
-          - camellia-lineage-23.2
+          - vortex-test
       include_susfs:
         description: 'Include SUSFS (Kernel Anti-Detection)'
         required: true
