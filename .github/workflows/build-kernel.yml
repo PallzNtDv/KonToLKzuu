@@ -309,9 +309,13 @@ jobs:
             echo '	default y' >> drivers/kernelsu/Kconfig
           fi
 
-          # Inject source Kconfig & Makefile hanya jika belum terinjeksi
+          # Normalisasi dan bersihkan referensi Kconfig lama dari setup.sh
+          sed -i 's|source "KernelSU/Kconfig"|source "drivers/kernelsu/Kconfig"|g' drivers/Kconfig
+          sed -i 's|source "drivers/KernelSU/Kconfig"|source "drivers/kernelsu/Kconfig"|g' drivers/Kconfig
+
+          # Inject source Kconfig (sebelum endmenu) & Makefile hanya jika belum terinjeksi
           if ! grep -q "drivers/kernelsu/Kconfig" drivers/Kconfig; then
-            echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+            sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
           fi
           if ! grep -q "kernelsu" drivers/Makefile; then
             echo 'obj-y += kernelsu/' >> drivers/Makefile
