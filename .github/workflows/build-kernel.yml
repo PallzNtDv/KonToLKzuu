@@ -278,14 +278,21 @@ jobs:
         run: |
           cd kernel-source
 
-          # Helper function untuk manual clone & injeksi Kconfig/Makefile
+          # Helper function untuk manual clone & injeksi Kconfig/Makefile dengan fallback otomatis
           inject_ksu_manual() {
             local repo_url="$1"
             local branch="${2:-main}"
             echo "📥 Injecting KernelSU directly from $repo_url (Branch: $branch)..."
             rm -rf drivers/kernelsu
-            git clone --depth=1 -b "$branch" "$repo_url" drivers/kernelsu || git clone --depth=1 "$repo_url" drivers/kernelsu
             
+            # Coba clone repo yang diminta; jika gagal, fallback ke Official KernelSU
+            if ! git clone --depth=1 -b "$branch" "$repo_url" drivers/kernelsu 2>/dev/null && \
+               ! git clone --depth=1 "$repo_url" drivers/kernelsu 2>/dev/null; then
+              echo "⚠️ Warning: Repositori $repo_url tidak ditemukan atau bersifat privat."
+              echo "🔄 Falling back to Official KernelSU (tiann/KernelSU)..."
+              git clone --depth=1 https://github.com/tiann/KernelSU.git drivers/kernelsu
+            fi
+
             if ! grep -q "kernelsu" drivers/Kconfig; then
               sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
             fi
@@ -317,8 +324,8 @@ jobs:
             run_ksu_setup "https://raw.githubusercontent.com/backslashxx/KernelSU/main/kernel/setup.sh" "main" "https://github.com/backslashxx/KernelSU.git"
           elif [ "$FORK" = "SUKISU" ]; then
             run_ksu_setup "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" "main" "https://github.com/SukiSU-Ultra/SukiSU-Ultra.git"
-          elif [ "$FORK" = "ReSuKISU" ]; then
-            run_ksu_setup "https://raw.githubusercontent.com/rsuntk/ReSuKISU/main/kernel/setup.sh" "main" "https://github.com/rsuntk/ReSuKISU.git"
+          elif [ "$FORK" = "ReSuKISU" ] || [ "$FORK" = "ReSukiSU" ]; then
+            run_ksu_setup "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" "main" "https://github.com/ReSukiSU/ReSukiSU.git"
           elif [ "$FORK" = "KSU-Next" ]; then
             run_ksu_setup "https://raw.githubusercontent.com/rifs28/KernelSU-Next/next/kernel/setup.sh" "next" "https://github.com/rifs28/KernelSU-Next.git"
           else
