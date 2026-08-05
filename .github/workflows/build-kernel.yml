@@ -349,22 +349,29 @@ jobs:
         run: |
           cd kernel-source
           echo "Applying SUSFS 4.14 Patch & Configs..."
-          if [ -d "../patches/susfs_4.14" ]; then
-            # 1. Eksekusi semua file .patch / .diff ke dalam source code kernel
-            for patch_file in ../patches/susfs_4.14/*.patch ../patches/susfs_4.14/*.diff; do
-              if [ -f "$patch_file" ]; then
-                echo "🛠️ Applying patch: $patch_file"
-                patch -p1 < "$patch_file" || git apply "$patch_file" || true
-              fi
-            done
+          
+          # Buat folder jika belum ada
+          mkdir -p ../patches/susfs_4.14
 
-            # 2. Salin file header (susfs.h / susfs_def.h) jika ada folder include di dalam patches
-            if [ -d "../patches/susfs_4.14/include" ]; then
-              echo "📥 Copying SUSFS header files..."
-              cp -r ../patches/susfs_4.14/include/* include/ 2>/dev/null || true
+          # Unduh patch resmi 4.14 jika tidak ada file .patch lokal
+          if [ -z "$(ls -A ../patches/susfs_4.14/*.patch 2>/dev/null)" ]; then
+            echo "📥 Downloading SUSFS 4.14 patch directly from simonpunk GitLab..."
+            curl -fLSs "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/kernel_patches/50_add_susfs_in_kernel-4.14.patch" \
+              -o ../patches/susfs_4.14/50_add_susfs_in_kernel-4.14.patch 2>/dev/null || true
+          fi
+
+          # 1. Eksekusi semua file .patch / .diff ke dalam source code kernel C
+          for patch_file in ../patches/susfs_4.14/*.patch ../patches/susfs_4.14/*.diff; do
+            if [ -f "$patch_file" ]; then
+              echo "🛠️ Applying patch: $patch_file"
+              patch -p1 < "$patch_file" || git apply "$patch_file" || true
             fi
-          else
-            echo "⚠️ Warning: Folder ../patches/susfs_4.14 tidak ditemukan!"
+          done
+
+          # 2. Salin file header (susfs.h / susfs_def.h) jika ada folder include tambahan
+          if [ -d "../patches/susfs_4.14/include" ]; then
+            echo "📥 Copying SUSFS header files..."
+            cp -r ../patches/susfs_4.14/include/* include/ 2>/dev/null || true
           fi
 
       - name: Inject Selected Kernel Features
