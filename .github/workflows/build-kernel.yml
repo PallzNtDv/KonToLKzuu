@@ -343,7 +343,7 @@ jobs:
           echo "Applying Baseband-guard..."
           wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash || true
           echo "CONFIG_BBG=y" >> arch/arm64/configs/$KERNEL_DEFCONFIG
-
+          
       - name: Apply SUSFS Patch & Configs
         if: inputs.include_susfs == true
         run: |
@@ -373,17 +373,28 @@ jobs:
             fi
           done
 
-          # 3. Cari dan salin header susfs dari seluruh direktori project (termasuk folder driver KSU)
+          # 3. FIX: Pastikan fs/susfs.c ada di tempatnya
+          echo "📥 Verifying fs/susfs.c..."
+          if [ ! -f "fs/susfs.c" ]; then
+            echo "⚠️ fs/susfs.c missing after patch! Searching local repository..."
+            find . -type f -name "susfs.c" -exec cp {} fs/susfs.c \; 2>/dev/null || true
+          fi
+
+          if [ ! -f "fs/susfs.c" ] || grep -q -i "<!DOCTYPE" fs/susfs.c 2>/dev/null; then
+            echo "📥 Downloading fs/susfs.c directly from SuSFS repository..."
+            curl -sSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/fs/susfs.c" -o fs/susfs.c || true
+          fi
+
+          # 4. Cari dan salin header susfs dari seluruh direktori project
           echo "📥 Searching and copying SUSFS headers from local sources..."
           find . -type f -name "susfs.h" -exec cp {} include/linux/ \; 2>/dev/null || true
           find . -type f -name "susfs_def.h" -exec cp {} include/linux/ \; 2>/dev/null || true
 
-          # 4. Unduh susfs.h jika belum ada
+          # 5. Unduh header jika belum ada atau rusak
           if [ ! -f "include/linux/susfs.h" ] || grep -q -i "<!DOCTYPE" include/linux/susfs.h 2>/dev/null; then
             curl -sSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/include/linux/susfs.h" -o include/linux/susfs.h || true
           fi
 
-          # 5. Buat susfs_def.h secara otomatis jika belum ada atau terinfeksi HTML
           if [ ! -f "include/linux/susfs_def.h" ] || grep -q -i "<!DOCTYPE" include/linux/susfs_def.h 2>/dev/null; then
             if [ -f "include/linux/susfs.h" ] && ! grep -q -i "<!DOCTYPE" include/linux/susfs.h; then
               cp include/linux/susfs.h include/linux/susfs_def.h
@@ -394,31 +405,29 @@ jobs:
             fi
           fi
 
-          # 6. Suntikkan seluruh definisi makro SuSFS yang wajib untuk Kernel 4.14
-          echo "🔧 Injecting required SuSFS macros into include/linux/susfs_def.h..."
+          # 6. Suntikkan seluruh definisi makro SuSFS (Task, Inode, dan Mount IDs)
+          echo "🔧 Injecting complete SuSFS macros set..."
           grep -q "TASK_STRUCT_NON_ROOT_USER_APP_PROC" include/linux/susfs_def.h || echo "#define TASK_STRUCT_NON_ROOT_USER_APP_PROC (1 << 0)" >> include/linux/susfs_def.h
           grep -q "INODE_STATE_SUS_KSTAT" include/linux/susfs_def.h || echo "#define INODE_STATE_SUS_KSTAT (1 << 0)" >> include/linux/susfs_def.h
           grep -q "INODE_STATE_SUS_PATH" include/linux/susfs_def.h || echo "#define INODE_STATE_SUS_PATH (1 << 1)" >> include/linux/susfs_def.h
           grep -q "INODE_STATE_SUS_MOUNT" include/linux/susfs_def.h || echo "#define INODE_STATE_SUS_MOUNT (1 << 2)" >> include/linux/susfs_def.h
           grep -q "INODE_STATE_OPEN_REDIRECT" include/linux/susfs_def.h || echo "#define INODE_STATE_OPEN_REDIRECT (1 << 3)" >> include/linux/susfs_def.h
           
-          # Makro khusus Mount Hiding di fs/namespace.c
           grep -q "DEFAULT_SUS_MNT_ID" include/linux/susfs_def.h || echo "#define DEFAULT_SUS_MNT_ID 100000" >> include/linux/susfs_def.h
           grep -q "DEFAULT_SUS_MNT_GROUP_ID" include/linux/susfs_def.h || echo "#define DEFAULT_SUS_MNT_GROUP_ID 100000" >> include/linux/susfs_def.h
           grep -q "DEFAULT_SUS_MNT_ID_FOR_KSU_PROC_UNSHARE" include/linux/susfs_def.h || echo "#define DEFAULT_SUS_MNT_ID_FOR_KSU_PROC_UNSHARE 99999" >> include/linux/susfs_def.h
 
-          # 7. Memastikan fs/namei.c dan fs/namespace.c membaca header susfs_def.h
-          if ! grep -q "linux/susfs_def.h" fs/namei.c; then
-            echo "🔧 Injecting #include <linux/susfs_def.h> into fs/namei.c..."
-            sed -i '1i#include <linux/susfs_def.h>' fs/namei.c
-          fi
-          if ! grep -q "linux/susfs_def.h" fs/namespace.c; then
-            echo "🔧 Injecting #include <linux/susfs_def.h> into fs/namespace.c..."
-            sed -i '1i#include <linux/susfs_def.h>' fs/namespace.c
-          fi
+          # 7. INJEKSI MASSAL: Pindai semua file .c yang mengandung kode 'susfs' dan paksakan #include <linux/susfs_def.h>
+          echo "🔧 Mass injecting #include <linux/susfs_def.h> into all patched C files..."
+          grep -rl "susfs" fs/ kernel/ 2>/dev/null | grep "\.c$" | while read -r file; do
+            if ! grep -q "linux/susfs_def.h" "$file"; then
+              echo "  -> Injecting header into $file"
+              sed -i '1i#include <linux/susfs_def.h>' "$file"
+            fi
+          done
 
-          echo "✅ Header verification complete:"
-          ls -l include/linux/susfs*.h
+          echo "✅ Verification complete:"
+          ls -l fs/susfs.c include/linux/susfs*.h
           
       - name: Inject Selected Kernel Features
         uses: ./.github/actions/inject-features
