@@ -395,30 +395,12 @@ jobs:
           fi
 
           # 6. Suntikkan seluruh definisi makro SuSFS yang wajib untuk Kernel 4.14
-          cat << 'EOF' >> include/linux/susfs_def.h
-
-/* SuSFS Definitions Fallback */
-#ifndef TASK_STRUCT_NON_ROOT_USER_APP_PROC
-#define TASK_STRUCT_NON_ROOT_USER_APP_PROC (1 << 0)
-#endif
-
-#ifndef INODE_STATE_SUS_KSTAT
-#define INODE_STATE_SUS_KSTAT (1 << 0)
-#endif
-
-#ifndef INODE_STATE_SUS_PATH
-#define INODE_STATE_SUS_PATH (1 << 1)
-#endif
-
-#ifndef INODE_STATE_SUS_MOUNT
-#define INODE_STATE_SUS_MOUNT (1 << 2)
-#endif
-
-#ifndef INODE_STATE_OPEN_REDIRECT
-#define INODE_STATE_OPEN_REDIRECT (1 << 3)
-#endif
-
-EOF
+          echo "🔧 Injecting required SuSFS macros into include/linux/susfs_def.h..."
+          grep -q "TASK_STRUCT_NON_ROOT_USER_APP_PROC" include/linux/susfs_def.h || echo "#define TASK_STRUCT_NON_ROOT_USER_APP_PROC (1 << 0)" >> include/linux/susfs_def.h
+          grep -q "INODE_STATE_SUS_KSTAT" include/linux/susfs_def.h || echo "#define INODE_STATE_SUS_KSTAT (1 << 0)" >> include/linux/susfs_def.h
+          grep -q "INODE_STATE_SUS_PATH" include/linux/susfs_def.h || echo "#define INODE_STATE_SUS_PATH (1 << 1)" >> include/linux/susfs_def.h
+          grep -q "INODE_STATE_SUS_MOUNT" include/linux/susfs_def.h || echo "#define INODE_STATE_SUS_MOUNT (1 << 2)" >> include/linux/susfs_def.h
+          grep -q "INODE_STATE_OPEN_REDIRECT" include/linux/susfs_def.h || echo "#define INODE_STATE_OPEN_REDIRECT (1 << 3)" >> include/linux/susfs_def.h
 
           # 7. Memastikan fs/namei.c membaca header susfs_def.h
           if ! grep -q "linux/susfs_def.h" fs/namei.c; then
