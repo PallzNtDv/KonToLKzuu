@@ -353,16 +353,16 @@ jobs:
           mkdir -p ../patches/susfs_4.14
           mkdir -p include/linux
 
-          # 1. Unduh patch resmi 4.14 jika belum ada
+          # 1. Unduh patch resmi 4.14 (Menggunakan -fsSL agar tidak menyimpan file HTML jika 404)
           if [ -z "$(ls -A ../patches/susfs_4.14/*.patch 2>/dev/null)" ]; then
             echo "📥 Downloading SUSFS 4.14 patch..."
-            curl -sSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/kernel_patches/50_add_susfs_in_kernel-4.14.patch" \
+            curl -fsSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/kernel_patches/50_add_susfs_in_kernel-4.14.patch" \
               -o ../patches/susfs_4.14/50_add_susfs_in_kernel-4.14.patch || true
           fi
 
           # Bersihkan file patch jika terunduh sebagai HTML / 404
           for f in ../patches/susfs_4.14/*; do
-            if [ -f "$f" ] && (grep -q -iE "<!DOCTYPE|<html|404: Not Found" "$f" 2>/dev/null); then
+            if [ -f "$f" ] && (grep -q -iE "<!DOCTYPE|<html|404" "$f" 2>/dev/null); then
               echo "⚠️ Cleaning corrupted patch file: $f"
               rm -f "$f"
             fi
@@ -376,35 +376,43 @@ jobs:
             fi
           done
 
-          # 3. Verifikasi & Pembersihan fs/susfs.c
+          # 3. Verifikasi & Ambil fs/susfs.c secara aman
           echo "📥 Verifying fs/susfs.c..."
-          if [ -f "fs/susfs.c" ] && (grep -q -iE "<!DOCTYPE|<html|404: Not Found" fs/susfs.c 2>/dev/null); then
+          if [ -f "fs/susfs.c" ] && (grep -q -iE "<!DOCTYPE|<html|404" fs/susfs.c 2>/dev/null); then
+            echo "⚠️ Removing HTML-corrupted fs/susfs.c..."
             rm -f fs/susfs.c
           fi
 
           if [ ! -f "fs/susfs.c" ]; then
+            echo "🔍 Searching local repository for susfs.c..."
             find . -type f -name "susfs.c" ! -path "./fs/susfs.c" -exec cp {} fs/susfs.c \; 2>/dev/null || true
           fi
 
-          if [ ! -f "fs/susfs.c" ] || grep -q -iE "<!DOCTYPE|<html|404: Not Found" fs/susfs.c 2>/dev/null; then
-            curl -sSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/fs/susfs.c" -o fs/susfs.c || true
+          if [ ! -f "fs/susfs.c" ]; then
+            echo "📥 Fetching fs/susfs.c via fallback mirrors..."
+            curl -fsSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/kernel_patches/fs/susfs.c" -o fs/susfs.c 2>/dev/null || \
+            curl -fsSL "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/fs/susfs.c" -o fs/susfs.c 2>/dev/null || true
           fi
 
-          # 4. Cari, Bersihkan, dan Ambil Valid include/linux/susfs.h
+          if [ -f "fs/susfs.c" ] && (grep -q -iE "<!DOCTYPE|<html|404" fs/susfs.c 2>/dev/null); then
+            rm -f fs/susfs.c
+          fi
+
+          # 4. Ambil include/linux/susfs.h secara aman
           echo "📥 Handling include/linux/susfs.h..."
-          if [ -f "include/linux/susfs.h" ] && (grep -q -iE "<!DOCTYPE|<html|404: Not Found" include/linux/susfs.h 2>/dev/null); then
-            echo "⚠️ Removing corrupted susfs.h (404/HTML)..."
+          if [ -f "include/linux/susfs.h" ] && (grep -q -iE "<!DOCTYPE|<html|404" include/linux/susfs.h 2>/dev/null); then
             rm -f include/linux/susfs.h
           fi
 
           if [ ! -f "include/linux/susfs.h" ]; then
-            echo "🔍 Searching local repo (drivers/kernelsu) for susfs.h..."
+            echo "🔍 Searching local repo for susfs.h..."
             find . -type f -name "susfs.h" ! -path "./include/linux/susfs.h" -exec cp {} include/linux/ \; 2>/dev/null || true
           fi
 
-          if [ ! -f "include/linux/susfs.h" ] || (grep -q -iE "<!DOCTYPE|<html|404: Not Found" include/linux/susfs.h 2>/dev/null); then
-            echo "📥 Fetching valid susfs.h from GitLab simonpunk 4.14..."
-            curl -sSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/include/linux/susfs.h" -o include/linux/susfs.h || true
+          if [ ! -f "include/linux/susfs.h" ]; then
+            echo "📥 Fetching valid susfs.h..."
+            curl -fsSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/include/linux/susfs.h" -o include/linux/susfs.h 2>/dev/null || \
+            curl -fsSL "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/include/linux/susfs.h" -o include/linux/susfs.h 2>/dev/null || true
           fi
 
           # 5. DIBUAT MANDIRI: Buat file include/linux/susfs_def.h bersih secara langsung
@@ -460,6 +468,7 @@ jobs:
           done
 
           echo "✅ Verification complete:"
+          head -n 5 fs/susfs.c || true
           head -n 5 include/linux/susfs.h || true
           head -n 5 include/linux/susfs_def.h || true
           
