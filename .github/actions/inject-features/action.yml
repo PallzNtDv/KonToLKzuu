@@ -60,14 +60,20 @@ runs:
         fi
 
         # -----------------------------------------------------------------
-        # 2. WireGuard Protocol (Physical Copy + Timespec Redefinition Fix)
+        # 2. WireGuard Protocol (Fix Duplicate Symbols in drivers/ vs net/)
         # -----------------------------------------------------------------
         if [ "${{ inputs.enable_wireguard }}" = "true" ]; then
           echo "🌐 Installing WireGuard..."
-          rm -rf /tmp/wireguard net/wireguard
-          git clone --depth=1 https://github.com/WireGuard/wireguard-linux-compat.git /tmp/wireguard
 
-          # Copy source WireGuard secara fisik ke net/wireguard
+          # Hapus seluruh folder duplikat WireGuard lama
+          rm -rf drivers/net/wireguard net/wireguard /tmp/wireguard
+
+          # Bersihkan referensi wireguard lama dari drivers/net
+          sed -i '/wireguard/d' drivers/net/Kconfig 2>/dev/null || true
+          sed -i '/wireguard/d' drivers/net/Makefile 2>/dev/null || true
+
+          # Clone & Copy source WireGuard hanya ke net/wireguard
+          git clone --depth=1 https://github.com/WireGuard/wireguard-linux-compat.git /tmp/wireguard
           cp -r /tmp/wireguard/src net/wireguard
 
           # Fix error redefinition of 'timespec' / '__kernel_timespec' pada Kernel 4.14
@@ -76,12 +82,11 @@ runs:
             sed -i '/struct __kernel_timespec {/,/};/s/^/\/\//' net/wireguard/compat/compat.h
           fi
 
-          # Pastikan entri Kconfig terdaftar di net/Kconfig
+          # Daftarkan Kconfig & Makefile hanya pada net/
           if ! grep -q "wireguard" net/Kconfig; then
             sed -i '/endmenu/i source "net/wireguard/Kconfig"' net/Kconfig || echo 'source "net/wireguard/Kconfig"' >> net/Kconfig
           fi
 
-          # Pastikan entri Makefile terdaftar di net/Makefile
           if ! grep -q "wireguard" net/Makefile; then
             echo 'obj-$(CONFIG_WIREGUARD) += wireguard/' >> net/Makefile
           fi
@@ -89,7 +94,7 @@ runs:
           # Hapus direktori temporary
           rm -rf /tmp/wireguard
           echo "CONFIG_WIREGUARD=y" >> $DEFCONFIG
-          echo "✅ WireGuard successfully injected & patched!"
+          echo "✅ WireGuard successfully injected without duplicates!"
         fi
 
         # -----------------------------------------------------------------
