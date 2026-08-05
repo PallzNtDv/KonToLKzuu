@@ -336,14 +336,6 @@ jobs:
             curl -fLSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/include/linux/susfs_def.h" -o include/linux/susfs_def.h 2>/dev/null || true
           fi
 
-      - name: Apply Baseband-Guard (BBG)
-        if: inputs.include_bbg == true
-        run: |
-          cd kernel-source
-          echo "Applying Baseband-guard..."
-          wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash || true
-          echo "CONFIG_BBG=y" >> arch/arm64/configs/$KERNEL_DEFCONFIG
-          
       - name: Apply SUSFS Patch & Configs
         if: inputs.include_susfs == true
         run: |
@@ -356,7 +348,7 @@ jobs:
           # 1. Unduh patch resmi 4.14 jika belum ada
           if [ -z "$(ls -A ../patches/susfs_4.14/*.patch 2>/dev/null)" ]; then
             echo "📥 Downloading SUSFS 4.14 patch..."
-            curl -sSL "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/kernel_patches/50_add_susfs_in_kernel-4.14.patch" \
+            curl -sSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/kernel_patches/50_add_susfs_in_kernel-4.14.patch" \
               -o ../patches/susfs_4.14/50_add_susfs_in_kernel-4.14.patch || true
           fi
 
@@ -387,14 +379,24 @@ jobs:
           fi
 
           if [ ! -f "fs/susfs.c" ] || grep -q -iE "<!DOCTYPE|<html|404: Not Found" fs/susfs.c 2>/dev/null; then
-            curl -sSL "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/fs/susfs.c" -o fs/susfs.c || true
+            curl -sSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/fs/susfs.c" -o fs/susfs.c || true
           fi
 
-          # 4. Salin susfs.h jika ada di lokal repo
-          find . -type f -name "susfs.h" ! -path "./include/linux/susfs.h" -exec cp {} include/linux/ \; 2>/dev/null || true
+          # 4. Cari, Bersihkan, dan Ambil Valid include/linux/susfs.h
+          echo "📥 Handling include/linux/susfs.h..."
+          if [ -f "include/linux/susfs.h" ] && (grep -q -iE "<!DOCTYPE|<html|404: Not Found" include/linux/susfs.h 2>/dev/null); then
+            echo "⚠️ Removing corrupted susfs.h (404/HTML)..."
+            rm -f include/linux/susfs.h
+          fi
 
-          if [ ! -f "include/linux/susfs.h" ] || grep -q -iE "<!DOCTYPE|<html|404: Not Found" include/linux/susfs.h 2>/dev/null; then
-            curl -sSL "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/include/linux/susfs.h" -o include/linux/susfs.h || true
+          if [ ! -f "include/linux/susfs.h" ]; then
+            echo "🔍 Searching local repo (drivers/kernelsu) for susfs.h..."
+            find . -type f -name "susfs.h" ! -path "./include/linux/susfs.h" -exec cp {} include/linux/ \; 2>/dev/null || true
+          fi
+
+          if [ ! -f "include/linux/susfs.h" ] || (grep -q -iE "<!DOCTYPE|<html|404: Not Found" include/linux/susfs.h 2>/dev/null); then
+            echo "📥 Fetching valid susfs.h from GitLab simonpunk 4.14..."
+            curl -sSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/include/linux/susfs.h" -o include/linux/susfs.h || true
           fi
 
           # 5. DIBUAT MANDIRI: Buat file include/linux/susfs_def.h bersih secara langsung
@@ -442,7 +444,7 @@ jobs:
 
           # 6. INJEKSI MASSAL: Pindai semua file .c yang mengandung kode 'susfs' dan masukkan #include <linux/susfs_def.h>
           echo "🔧 Mass injecting #include <linux/susfs_def.h> into all patched C files..."
-          grep -rl "susfs" fs/ kernel/ 2>/dev/null | grep "\.c$" | while read -r file; do
+          grep -rl "susfs" fs/ kernel/ drivers/ 2>/dev/null | grep "\.c$" | while read -r file; do
             if ! grep -q "linux/susfs_def.h" "$file"; then
               echo "  -> Injecting header into $file"
               sed -i '1i#include <linux/susfs_def.h>' "$file"
@@ -450,7 +452,8 @@ jobs:
           done
 
           echo "✅ Verification complete:"
-          cat include/linux/susfs_def.h
+          head -n 5 include/linux/susfs.h || true
+          head -n 5 include/linux/susfs_def.h || true
           
       - name: Inject Selected Kernel Features
         uses: ./.github/actions/inject-features
