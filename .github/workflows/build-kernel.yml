@@ -266,29 +266,43 @@ jobs:
       - name: Setup KSU Fork ("${{ inputs.ksu_fork }}")
         run: |
           cd kernel-source
+
           if [ "${{ inputs.ksu_fork }}" = "xxKSU" ]; then
-            echo "Setting up xxKSU..."
+            echo "🚀 Setting up xxKSU..."
             curl -fLSs "https://raw.githubusercontent.com/backslashxx/KernelSU/main/kernel/setup.sh" | bash -s main || \
             curl -fLSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s master
           elif [ "${{ inputs.ksu_fork }}" = "SUKISU" ]; then
-            echo "Setting up SUKISU..."
+            echo "🚀 Setting up SUKISU..."
             curl -fLSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main || \
             curl -fLSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/master/kernel/setup.sh" | bash -s master
           elif [ "${{ inputs.ksu_fork }}" = "ReSuKISU" ]; then
-            echo "Setting up ReSuKISU..."
+            echo "🚀 Setting up ReSuKISU..."
             curl -fLSs "https://raw.githubusercontent.com/rsuntk/ReSuKISU/main/kernel/setup.sh" | bash -s main || \
             curl -fLSs "https://raw.githubusercontent.com/rsuntk/ReSuKISU/master/kernel/setup.sh" | bash -s master
+          elif [ "${{ inputs.ksu_fork }}" = "KSU-Next" ]; then
+            echo "🚀 Setting up KernelSU-Next..."
+            curl -fLSs "https://raw.githubusercontent.com/rifs28/KernelSU-Next/next/kernel/setup.sh" | bash -s next || \
+            curl -fLSs "https://raw.githubusercontent.com/rifs28/KernelSU-Next/main/kernel/setup.sh" | bash -s main
           else
-            echo "Setting up Official KernelSU..."
+            echo "🚀 Setting up Official KernelSU..."
             curl -fLSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main || \
             curl -fLSs "https://raw.githubusercontent.com/tiann/KernelSU/master/kernel/setup.sh" | bash -s master
           fi
 
-          HOOK_FILE="drivers/kernelsu/core_hook.c"
-          if [ -f "$HOOK_FILE" ]; then
-            echo "Patching core_hook.c for Non-GKI manual hooks..."
-            sed -i 's/#ifdef CONFIG_KPROBES/#if 0/g' "$HOOK_FILE"
+          # Validasi apakah folder drivers/kernelsu berhasil dibuat
+          if [ ! -d "drivers/kernelsu" ]; then
+            echo "❌ Error: KernelSU directory not found! Setup script failed."
+            exit 1
           fi
+
+          # Patch core_hook.c / ksu_hook.c untuk Non-GKI manual hooks
+          HOOK_FILES=$(find drivers/kernelsu -type f \( -name "core_hook.c" -o -name "ksu_hook.c" \))
+          for HOOK_FILE in $HOOK_FILES; do
+            if [ -f "$HOOK_FILE" ]; then
+              echo "🔧 Patching $HOOK_FILE for Non-GKI manual hooks..."
+              sed -i 's/#ifdef CONFIG_KPROBES/#if 0/g' "$HOOK_FILE"
+            fi
+          done
 
       - name: Apply Manual Hooks for Official KSU (4.14 Non-GKI)
         if: inputs.ksu_fork == 'Official'
@@ -608,7 +622,7 @@ jobs:
           name: manager-apk-artifact
           path: output_apk/
           retention-days: 1
-  
+
 # =========================================================================
 # JOB 3: PUBLISH TO GITHUB RELEASES & TELEGRAM
 # =========================================================================
@@ -663,13 +677,6 @@ jobs:
             echo "$EOF_MARKER" >> $GITHUB_ENV
           else
             echo "CHANGELOG_BODY=* No commit log available" >> $GITHUB_ENV
-          fi
-
-          LINK_FILE=$(find release_assets -type f -name "commit_link.txt" | head -n 1)
-          if [ -n "$LINK_FILE" ] && [ -f "$LINK_FILE" ]; then
-            echo "COMMIT_LINK=$(cat "$LINK_FILE")" >> $GITHUB_ENV
-          else
-            echo "COMMIT_LINK=" >> $GITHUB_ENV
           fi
 
           LINK_FILE=$(find release_assets -type f -name "commit_link.txt" | head -n 1)
@@ -773,6 +780,9 @@ jobs:
           if cl_files and os.path.exists(cl_files[0]):
               with open(cl_files[0], "r") as f:
                   changelog_str = f.read().strip()
+                  # Truncate changelog jika terlalu panjang agar tidak melebihi limit Telegram (1024 char caption)
+                  if len(changelog_str) > 300:
+                      changelog_str = changelog_str[:300] + "\n... (truncated)"
 
           commit_link = ""
           link_files = glob.glob("release_assets/**/commit_link.txt", recursive=True)
@@ -880,3 +890,4 @@ jobs:
               except Exception as e:
                   print("Telegram finish notification error:", e)
           EOF
+          
