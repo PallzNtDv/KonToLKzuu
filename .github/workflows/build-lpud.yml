@@ -1,4 +1,4 @@
-name: Build lpud Binary
+Name: Build lpud Binary
 
 on:
   workflow_dispatch:
@@ -11,6 +11,7 @@ on:
         options:
           - 'xxKSU'
           - 'SUKISU'
+          - 'ReSuKISU'
       target_arch:
         description: 'Target Arsitektur'
         required: true
@@ -34,7 +35,7 @@ permissions:
 
 jobs:
   build-lpud:
-    if: inputs.ksu_fork == 'xxKSU' || inputs.ksu_fork == 'SUKISU'
+    if: inputs.ksu_fork == 'xxKSU' || inputs.ksu_fork == 'SUKISU' || inputs.ksu_fork == 'ReSuKISU'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -53,6 +54,9 @@ jobs:
           if [ "${{ inputs.ksu_fork }}" = "xxKSU" ]; then
             echo "Cloning xxKSU Userspace..."
             git clone --depth=1 https://github.com/backslashxx/KernelSU.git ksu-src
+          elif [ "${{ inputs.ksu_fork }}" = "ReSuKISU" ]; then
+            echo "Cloning ReSuKISU Userspace..."
+            git clone --depth=1 https://github.com/rsuntk/ReSuKISU.git ksu-src
           else
             echo "Cloning SUKISU Userspace..."
             git clone --depth=1 https://github.com/SukiSU-Ultra/SukiSU-Ultra.git ksu-src
