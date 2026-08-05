@@ -60,7 +60,7 @@ runs:
         fi
 
         # -----------------------------------------------------------------
-        # 2. WireGuard Protocol (Physical Copy - Fix Missing Kconfig)
+        # 2. WireGuard Protocol (Physical Copy + Timespec Redefinition Fix)
         # -----------------------------------------------------------------
         if [ "${{ inputs.enable_wireguard }}" = "true" ]; then
           echo "🌐 Installing WireGuard..."
@@ -69,6 +69,12 @@ runs:
 
           # Copy source WireGuard secara fisik ke net/wireguard
           cp -r /tmp/wireguard/src net/wireguard
+
+          # Fix error redefinition of 'timespec' / '__kernel_timespec' pada Kernel 4.14
+          if [ -f "net/wireguard/compat/compat.h" ]; then
+            echo "🔧 Patching compat.h for time64/timespec collision..."
+            sed -i '/struct __kernel_timespec {/,/};/s/^/\/\//' net/wireguard/compat/compat.h
+          fi
 
           # Pastikan entri Kconfig terdaftar di net/Kconfig
           if ! grep -q "wireguard" net/Kconfig; then
@@ -80,10 +86,10 @@ runs:
             echo 'obj-$(CONFIG_WIREGUARD) += wireguard/' >> net/Makefile
           fi
 
-          # Hapus direktori temporary tanpa merusak net/wireguard
+          # Hapus direktori temporary
           rm -rf /tmp/wireguard
           echo "CONFIG_WIREGUARD=y" >> $DEFCONFIG
-          echo "✅ WireGuard successfully injected physically!"
+          echo "✅ WireGuard successfully injected & patched!"
         fi
 
         # -----------------------------------------------------------------
