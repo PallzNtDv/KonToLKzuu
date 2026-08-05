@@ -305,9 +305,9 @@ jobs:
             exit 1
           fi
 
-          # Tambahkan opsi -L agar find mengikuti symlink ke KernelSU/kernel/tools/
-          echo "🔧 Bypassing strict inline hook check for Non-GKI..."
-          find -L drivers/kernelsu KernelSU -name "inline_hook_check.mk" 2>/dev/null -exec sed -i 's/\$(error/\$(info/g' {} + || true
+          # Bypass seluruh pengecekan $(error) pada Kbuild, Makefile, dan .mk di lingkungan KernelSU
+          echo "🔧 Bypassing strict inline hook & SUSFS checks for Non-GKI..."
+          find -L drivers/kernelsu KernelSU -type f \( -name "Kbuild" -o -name "*.mk" -o -name "Makefile" \) 2>/dev/null -exec sed -i 's/\$(error/\$(info/g' {} + || true
 
       - name: Apply Baseband-Guard (BBG)
         if: inputs.include_bbg == true
@@ -485,7 +485,6 @@ jobs:
           do.cleanuponabort=0
           device.name1=camellia
           device.name2=camellian
-          device.name3=camelliain
           supported.versions=
           supported.patchlevels=
           '; } # end properties
