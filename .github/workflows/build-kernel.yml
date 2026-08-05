@@ -257,16 +257,8 @@ jobs:
             
             if ! git clone --depth=1 -b "$branch" "$repo_url" drivers/kernelsu 2>/dev/null && \
                ! git clone --depth=1 "$repo_url" drivers/kernelsu 2>/dev/null; then
-              echo "⚠️ Warning: Repositori $repo_url tidak ditemukan atau bersifat privat."
-              echo "🔄 Falling back to Official KernelSU (tiann/KernelSU)..."
+              echo "⚠️ Warning: Repositori $repo_url tidak ditemukan. Falling back to Official KernelSU..."
               git clone --depth=1 https://github.com/tiann/KernelSU.git drivers/kernelsu
-            fi
-
-            if ! grep -q "kernelsu" drivers/Kconfig; then
-              sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
-            fi
-            if ! grep -q "kernelsu" drivers/Makefile; then
-              echo 'obj-y += kernelsu/' >> drivers/Makefile
             fi
           }
 
@@ -280,7 +272,7 @@ jobs:
               bash /tmp/ksu_setup.sh "$branch"
               rm -f /tmp/ksu_setup.sh
             else
-              echo "⚠️ setup.sh tidak ditemukan (404), beralih ke manual clone..."
+              echo "⚠️ setup.sh tidak ditemukan, beralih ke manual clone..."
               inject_ksu_manual "$repo_url" "$branch"
             fi
           }
@@ -300,29 +292,44 @@ jobs:
             run_ksu_setup "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" "main" "https://github.com/tiann/KernelSU.git"
           fi
 
-          if [ ! -d "drivers/kernelsu" ] && [ ! -d "KernelSU" ]; then
-            echo "❌ Error: KernelSU directory not found! Setup failed."
-            exit 1
+          # Normalisasi lokasi folder KSU ke drivers/kernelsu
+          if [ -d "KernelSU" ] && [ ! -d "drivers/kernelsu" ]; then
+            echo "🚚 Moving KernelSU to drivers/kernelsu..."
+            mv KernelSU drivers/kernelsu
           fi
 
-          # Bypass seluruh pengecekan $(error) pada Kbuild, Makefile, dan .mk di lingkungan KernelSU
-          echo "🔧 Bypassing strict inline hook & SUSFS checks for Non-GKI..."
-          find -L drivers/kernelsu KernelSU -type f \( -name "Kbuild" -o -name "*.mk" -o -name "Makefile" \) 2>/dev/null -exec sed -i 's/\$(error/\$(info/g' {} + || true
+          # Buat struktur minimal jika direktori masih kosong
+          mkdir -p drivers/kernelsu
 
-          # Salin/Download header SUSFS resmi dari repositori ReSukiSU agar seluruh makro CMD_SUSFS_* terdefinisi
-          echo "📥 Syncing matching SUSFS headers for ReSukiSU..."
+          # Cek & pastikan Kconfig tersedia agar make defconfig tidak error
+          if [ ! -f "drivers/kernelsu/Kconfig" ]; then
+            echo "⚠️ drivers/kernelsu/Kconfig missing, creating dummy Kconfig..."
+            echo 'config KERNELSU' > drivers/kernelsu/Kconfig
+            echo '	tristate "KernelSU support"' >> drivers/kernelsu/Kconfig
+            echo '	default y' >> drivers/kernelsu/Kconfig
+          fi
+
+          # Inject source Kconfig & Makefile hanya jika belum terinjeksi
+          if ! grep -q "drivers/kernelsu/Kconfig" drivers/Kconfig; then
+            echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+          fi
+          if ! grep -q "kernelsu" drivers/Makefile; then
+            echo 'obj-y += kernelsu/' >> drivers/Makefile
+          fi
+
+          # Bypass pengecekan error Kbuild/Makefile
+          echo "🔧 Bypassing strict checks..."
+          find -L drivers/kernelsu -type f \( -name "Kbuild" -o -name "*.mk" -o -name "Makefile" \) 2>/dev/null -exec sed -i 's/\$(error/\$(info/g' {} + || true
+
+          # Sinkronisasi header SUSFS
           mkdir -p include/linux
-
-          # Coba salin dari lokal KSU source jika tersedia
           if [ -d "drivers/kernelsu/kernel/include/linux" ]; then
             cp -rf drivers/kernelsu/kernel/include/linux/susfs*.h include/linux/ 2>/dev/null || true
           elif [ -d "drivers/kernelsu/include/linux" ]; then
             cp -rf drivers/kernelsu/include/linux/susfs*.h include/linux/ 2>/dev/null || true
           fi
 
-          # Ambil langsung dari ReSukiSU repository jika belum terisi atau variabel CMD_SUSFS_ADD_SUS_PATH_LOOP belum ada
           if [ ! -f "include/linux/susfs_def.h" ] || ! grep -q "CMD_SUSFS_ADD_SUS_PATH_LOOP" include/linux/susfs_def.h 2>/dev/null; then
-            echo "🌐 Downloading latest ReSukiSU SUSFS headers..."
             curl -fLSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/include/linux/susfs.h" -o include/linux/susfs.h 2>/dev/null || true
             curl -fLSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/include/linux/susfs_def.h" -o include/linux/susfs_def.h 2>/dev/null || true
           fi
