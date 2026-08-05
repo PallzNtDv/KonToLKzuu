@@ -309,13 +309,20 @@ jobs:
           echo "🔧 Bypassing strict inline hook & SUSFS checks for Non-GKI..."
           find -L drivers/kernelsu KernelSU -type f \( -name "Kbuild" -o -name "*.mk" -o -name "Makefile" \) 2>/dev/null -exec sed -i 's/\$(error/\$(info/g' {} + || true
 
-          # Memastikan file include/linux/susfs.h tersedia agar tidak error saat di-compile oleh Clang
+          # Memastikan file header include/linux/susfs.h & susfs_def.h tersedia
+          echo "📥 Fetching missing SUSFS header files (susfs.h & susfs_def.h)..."
+          mkdir -p include/linux
+
           if [ ! -f "include/linux/susfs.h" ]; then
-            echo "📥 Fetching missing include/linux/susfs.h header..."
-            mkdir -p include/linux
             curl -fLSs "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h 2>/dev/null || \
             curl -fLSs "https://gitlab.com/simonpunk/susfs4ksu/-/raw/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h 2>/dev/null || \
             touch include/linux/susfs.h
+          fi
+
+          if [ ! -f "include/linux/susfs_def.h" ]; then
+            curl -fLSs "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/kernel_patches/include/linux/susfs_def.h" -o include/linux/susfs_def.h 2>/dev/null || \
+            curl -fLSs "https://gitlab.com/simonpunk/susfs4ksu/-/raw/main/kernel_patches/include/linux/susfs_def.h" -o include/linux/susfs_def.h 2>/dev/null || \
+            touch include/linux/susfs_def.h
           fi
 
       - name: Apply Baseband-Guard (BBG)
