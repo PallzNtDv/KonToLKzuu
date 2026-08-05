@@ -1,5 +1,5 @@
 name: 'Inject Advanced Kernel Features'
-description: 'Inject customizable kernel features and optimizations into defconfig and source tree'
+description: 'Inject customizable kernel features, SUSFS, DroidSpace, and optimizations into defconfig and source tree'
 
 inputs:
   defconfig:
@@ -29,6 +29,14 @@ inputs:
     description: 'Enable TTL / HL Spoofing'
     required: false
     default: 'true'
+  enable_droidspace:
+    description: 'Enable DroidSpace Namespaces & OverlayFS (Mountify/Magic Mount)'
+    required: false
+    default: 'true'
+  enable_susfs:
+    description: 'Inject SUSFS Anti-Detection & Library Hiding'
+    required: false
+    default: 'true'
 
 runs:
   using: 'composite'
@@ -54,7 +62,7 @@ runs:
         # -----------------------------------------------------------------
         # 2. WireGuard Protocol (Using jury-rig.sh method)
         # -----------------------------------------------------------------
-        if [ "true" = "true" ]; then
+        if [ "${{ inputs.enable_wireguard }}" = "true" ]; then
           echo "🌐 Installing WireGuard..."
           rm -rf /tmp/wireguard
           git clone --depth=1 https://github.com/WireGuard/wireguard-linux-compat.git /tmp/wireguard
@@ -63,11 +71,7 @@ runs:
           
           if [ -f "$JURY_RIG" ]; then
             chmod +x "$JURY_RIG"
-            
-            # Jalankan jury-rig untuk menyambungkan source wireguard ke direktori kernel saat ini (.)
-            # Format jury-rig.sh: ./jury-rig.sh <path-ke-kernel-source>
             "$JURY_RIG" .
-            
             rm -rf /tmp/wireguard
             echo "CONFIG_WIREGUARD=y" >> $DEFCONFIG
             echo "✅ WireGuard successfully injected via jury-rig!"
@@ -128,5 +132,39 @@ runs:
           echo "CONFIG_IP_NF_TARGET_TTL=y" >> $DEFCONFIG
           echo "CONFIG_IP6_NF_TARGET_HL=y" >> $DEFCONFIG
           echo "CONFIG_NETFILTER_XT_MATCH_HL=y" >> $DEFCONFIG
+        fi
+
+        # -----------------------------------------------------------------
+        # 7. DroidSpace, Mountify (OverlayFS) & SUSFS Anti-Detection
+        # -----------------------------------------------------------------
+        if [ "${{ inputs.enable_droidspace }}" = "true" ]; then
+          echo "🧱 Enabling DroidSpace & OverlayFS Magic Mount..."
+          echo "CONFIG_OVERLAY_FS=y" >> $DEFCONFIG
+          echo "CONFIG_OVERLAY_FS_REDIRECT_DIR=y" >> $DEFCONFIG
+          echo "CONFIG_OVERLAY_FS_INDEX=y" >> $DEFCONFIG
+          echo "CONFIG_NAMESPACES=y" >> $DEFCONFIG
+          echo "CONFIG_UTS_NS=y" >> $DEFCONFIG
+          echo "CONFIG_IPC_NS=y" >> $DEFCONFIG
+          echo "CONFIG_USER_NS=y" >> $DEFCONFIG
+          echo "CONFIG_PID_NS=y" >> $DEFCONFIG
+          echo "CONFIG_NET_NS=y" >> $DEFCONFIG
+        fi
+
+        if [ "${{ inputs.enable_susfs }}" = "true" ]; then
+          echo "🕵️ Injecting SUSFS Anti-Detection & Library Hiding..."
+          sed -i '/CONFIG_KSU_SUSFS/d' $DEFCONFIG
+          cat <<EOF >> $DEFCONFIG
+CONFIG_KSU_SUSFS=y
+CONFIG_KSU_SUSFS_SUS_PATH=y
+CONFIG_KSU_SUSFS_SUS_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_KSTAT=y
+CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y
+CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+EOF
+        else
+          sed -i '/CONFIG_KSU_SUSFS/d' $DEFCONFIG
         fi
         
