@@ -31,7 +31,7 @@ on:
           - camellia
           - vortex-test
           - vortex-v1
-          - lineage-23.2
+          - camellia-lineage-23.2
       include_susfs:
         description: 'Include SUSFS (Kernel Anti-Detection)'
         required: true
