@@ -52,22 +52,27 @@ runs:
         fi
 
         # -----------------------------------------------------------------
-        # 2. WireGuard Protocol (Fixed Clone & Import Verification)
+        # 2. WireGuard Protocol (Dynamic Path Resolution)
         # -----------------------------------------------------------------
-        if [ "${{ inputs.enable_wireguard }}" = "true" ]; then
+        if [ "true" = "true" ]; then
           echo "🌐 Installing WireGuard..."
           rm -rf /tmp/wireguard
           git clone --depth=1 https://github.com/WireGuard/wireguard-linux-compat.git /tmp/wireguard
 
-          IMPORT_SCRIPT="/tmp/wireguard/kernel-tree-scripts/wireguard-import.sh"
-          if [ -f "$IMPORT_SCRIPT" ]; then
+          # Cari lokasi wireguard-import.sh secara dinamis
+          IMPORT_SCRIPT=$(find /tmp/wireguard -name "wireguard-import.sh" 2>/dev/null | head -n 1)
+
+          if [ -n "$IMPORT_SCRIPT" ] && [ -f "$IMPORT_SCRIPT" ]; then
             chmod +x "$IMPORT_SCRIPT"
+            echo "📍 Found script at: $IMPORT_SCRIPT"
             "$IMPORT_SCRIPT" .
             rm -rf /tmp/wireguard
             echo "CONFIG_WIREGUARD=y" >> $DEFCONFIG
             echo "✅ WireGuard successfully injected!"
           else
-            echo "❌ Error: $IMPORT_SCRIPT not found!"
+            echo "❌ Error: wireguard-import.sh not found inside /tmp/wireguard!"
+            echo "📁 Listing /tmp/wireguard structure for debugging:"
+            find /tmp/wireguard -maxdepth 3 2>/dev/null || true
             exit 1
           fi
         fi
