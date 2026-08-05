@@ -362,14 +362,6 @@ jobs:
           echo "✅ Verification of drivers/kernelsu directory:"
           ls -la drivers/kernelsu/
           
-      - name: Apply Baseband-Guard (BBG)
-        if: inputs.include_bbg == true
-        run: |
-          cd kernel-source
-          echo "Applying Baseband-guard..."
-          wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash || true
-          echo "CONFIG_BBG=y" >> arch/arm64/configs/$KERNEL_DEFCONFIG
-
       - name: Apply SUSFS Patch & Configs
         if: inputs.include_susfs == true
         run: |
@@ -379,14 +371,14 @@ jobs:
           mkdir -p ../patches/susfs_4.14
           mkdir -p include/linux
 
-          # 1. Download official 4.14 patch if missing
+          # 1. Unduh patch resmi 4.14 jika belum ada
           if [ -z "$(ls -A ../patches/susfs_4.14/*.patch 2>/dev/null)" ]; then
             echo "📥 Downloading SUSFS 4.14 patch..."
             curl -fsSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/kernel_patches/50_add_susfs_in_kernel-4.14.patch" \
               -o ../patches/susfs_4.14/50_add_susfs_in_kernel-4.14.patch || true
           fi
 
-          # Clean patch files if downloaded as HTML / 404
+          # Bersihkan file patch jika terunduh sebagai HTML / 404
           for f in ../patches/susfs_4.14/*; do
             if [ -f "$f" ] && (grep -q -iE "<!DOCTYPE|<html|404" "$f" 2>/dev/null); then
               echo "⚠️ Cleaning corrupted patch file: $f"
@@ -394,7 +386,7 @@ jobs:
             fi
           done
 
-          # 2. Execute patch against kernel C source
+          # 2. Eksekusi patch ke dalam source code kernel C
           for patch_file in ../patches/susfs_4.14/*.patch ../patches/susfs_4.14/*.diff; do
             if [ -f "$patch_file" ]; then
               echo "🛠️ Applying patch: $patch_file"
@@ -402,7 +394,7 @@ jobs:
             fi
           done
 
-          # 3. Setup include/linux/susfs.h safely
+          # 3. Penanganan include/linux/susfs.h secara ketat
           echo "📥 Setting up include/linux/susfs.h..."
           mkdir -p include/linux
 
@@ -410,35 +402,53 @@ jobs:
             rm -f include/linux/susfs.h
           fi
 
-          if [ ! -f "include/linux/susfs.h" ]; then
-            echo "🔍 Searching local repo for susfs.h..."
-            find . -type f -name "susfs.h" ! -path "./include/linux/susfs.h" -exec cp {} include/linux/susfs.h \; 2>/dev/null || true
+          # Prioritas 1: Cari dari repositori lokal (drivers/kernelsu dll)
+          LOCAL_SUSFS_H=$(find . -type f -name "susfs.h" ! -path "./include/linux/susfs.h" 2>/dev/null | head -n 1)
+          if [ -n "$LOCAL_SUSFS_H" ] && [ -f "$LOCAL_SUSFS_H" ]; then
+            echo "🔍 Found local susfs.h at: $LOCAL_SUSFS_H, copying to include/linux/..."
+            cp -f "$LOCAL_SUSFS_H" include/linux/susfs.h
           fi
 
-          if [ ! -f "include/linux/susfs.h" ] || (grep -q -iE "<!DOCTYPE|<html|404" include/linux/susfs.h 2>/dev/null); then
-            echo "📥 Fetching susfs.h from remote mirror..."
+          # Prioritas 2: Unduh dari daftar URL fallback
+          if [ ! -f "include/linux/susfs.h" ]; then
+            echo "📥 Fetching susfs.h from remote mirrors..."
+            curl -fsSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h 2>/dev/null || \
             curl -fsSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/include/linux/susfs.h" -o include/linux/susfs.h 2>/dev/null || \
             curl -fsSL "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/include/linux/susfs.h" -o include/linux/susfs.h 2>/dev/null || true
           fi
 
-          # 4. Setup fs/susfs.c safely
+          # Prioritas 3: Failsafe jika susfs.h tetap tidak ditemukan
+          if [ ! -f "include/linux/susfs.h" ] || (grep -q -iE "<!DOCTYPE|<html|404" include/linux/susfs.h 2>/dev/null); then
+            echo "🔧 Creating fallback include/linux/susfs.h..."
+            printf '%s\n' \
+              '#ifndef _LINUX_SUSFS_H' \
+              '#define _LINUX_SUSFS_H' \
+              '' \
+              '#include <linux/susfs_def.h>' \
+              '' \
+              '#endif /* _LINUX_SUSFS_H */' > include/linux/susfs.h
+          fi
+
+          # 4. Penanganan fs/susfs.c secara ketat
           echo "📥 Setting up fs/susfs.c..."
           if [ -f "fs/susfs.c" ] && (grep -q -iE "<!DOCTYPE|<html|404" fs/susfs.c 2>/dev/null); then
             rm -f fs/susfs.c
           fi
 
-          if [ ! -f "fs/susfs.c" ]; then
-            echo "🔍 Searching local repo for susfs.c..."
-            find . -type f -name "susfs.c" ! -path "./fs/susfs.c" -exec cp {} fs/susfs.c \; 2>/dev/null || true
+          LOCAL_SUSFS_C=$(find . -type f -name "susfs.c" ! -path "./fs/susfs.c" 2>/dev/null | head -n 1)
+          if [ -n "$LOCAL_SUSFS_C" ] && [ -f "$LOCAL_SUSFS_C" ]; then
+            echo "🔍 Found local susfs.c at: $LOCAL_SUSFS_C, copying to fs/..."
+            cp -f "$LOCAL_SUSFS_C" fs/susfs.c
           fi
 
-          if [ ! -f "fs/susfs.c" ] || (grep -q -iE "<!DOCTYPE|<html|404" fs/susfs.c 2>/dev/null); then
+          if [ ! -f "fs/susfs.c" ]; then
             echo "📥 Fetching susfs.c from remote mirror..."
             curl -fsSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/kernel_patches/fs/susfs.c" -o fs/susfs.c 2>/dev/null || \
+            curl -fsSL "https://gitlab.com/simonpunk/susfs4ksu/-/raw/kernel-4.14/fs/susfs.c" -o fs/susfs.c 2>/dev/null || \
             curl -fsSL "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/fs/susfs.c" -o fs/susfs.c 2>/dev/null || true
           fi
 
-          # 5. Generate clean include/linux/susfs_def.h directly
+          # 5. Buat include/linux/susfs_def.h bersih secara langsung
           echo "🔧 Generating clean include/linux/susfs_def.h directly..."
           printf '%s\n' \
             '#ifndef _SUSFS_DEF_H' \
@@ -480,7 +490,7 @@ jobs:
             '' \
             '#endif /* _SUSFS_DEF_H */' > include/linux/susfs_def.h
 
-          # 6. Mass-inject #include <linux/susfs_def.h> into all patched C files
+          # 6. Mass-inject #include <linux/susfs_def.h> ke seluruh file C patched
           echo "🔧 Mass injecting #include <linux/susfs_def.h> into all patched C files..."
           grep -rl "susfs" fs/ kernel/ drivers/ 2>/dev/null | grep "\.c$" | while read -r file; do
             if ! grep -q "linux/susfs_def.h" "$file"; then
@@ -492,6 +502,14 @@ jobs:
           echo "✅ Verification complete:"
           ls -la include/linux/susfs* || true
           ls -la fs/susfs.c || true
+          
+      - name: Apply Baseband-Guard (BBG)
+        if: inputs.include_bbg == true
+        run: |
+          cd kernel-source
+          echo "Applying Baseband-guard..."
+          wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash || true
+          echo "CONFIG_BBG=y" >> arch/arm64/configs/$KERNEL_DEFCONFIG
           
       - name: Inject Selected Kernel Features
         uses: ./.github/actions/inject-features
