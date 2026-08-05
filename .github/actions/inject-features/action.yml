@@ -52,14 +52,24 @@ runs:
         fi
 
         # -----------------------------------------------------------------
-        # 2. WireGuard Protocol
+        # 2. WireGuard Protocol (Fixed Clone & Import Verification)
         # -----------------------------------------------------------------
         if [ "${{ inputs.enable_wireguard }}" = "true" ]; then
           echo "🌐 Installing WireGuard..."
-          git clone --depth=1 https://git.zx2c4.com/wireguard-linux-compat /tmp/wireguard
-          /tmp/wireguard/kernel-tree-scripts/wireguard-import.sh .
           rm -rf /tmp/wireguard
-          echo "CONFIG_WIREGUARD=y" >> $DEFCONFIG
+          git clone --depth=1 https://github.com/WireGuard/wireguard-linux-compat.git /tmp/wireguard
+
+          IMPORT_SCRIPT="/tmp/wireguard/kernel-tree-scripts/wireguard-import.sh"
+          if [ -f "$IMPORT_SCRIPT" ]; then
+            chmod +x "$IMPORT_SCRIPT"
+            "$IMPORT_SCRIPT" .
+            rm -rf /tmp/wireguard
+            echo "CONFIG_WIREGUARD=y" >> $DEFCONFIG
+            echo "✅ WireGuard successfully injected!"
+          else
+            echo "❌ Error: $IMPORT_SCRIPT not found!"
+            exit 1
+          fi
         fi
 
         # -----------------------------------------------------------------
