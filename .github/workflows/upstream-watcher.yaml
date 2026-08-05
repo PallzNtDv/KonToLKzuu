@@ -1,4 +1,4 @@
-name: Flexible Upstream Dependency Watcher
+Name: Flexible Upstream Dependency Watcher
 
 on:
   schedule:
@@ -31,19 +31,37 @@ jobs:
           my_repo = os.environ.get("REPO_NAME", "")
           state_file = "upstream_hashes.json"
 
-          # 🎯 DAFTAR REPOSITORI BEBAS YANG INGIN DIPANTAU
+          # 🎯 DAFTAR REPOSITORI LENGKAP YANG DIPANTAU
           TARGETS = [
-              {
-                  "name": "KernelSU-Next",
-                  "url": "https://github.com/rifs28/KernelSU-Next.git",
-                  "branch": "main",
-                  "key": "ksu_next"
-              },
               {
                   "name": "Official KernelSU",
                   "url": "https://github.com/tiann/KernelSU.git",
                   "branch": "main",
                   "key": "official_ksu"
+              },
+              {
+                  "name": "SUKISU Ultra",
+                  "url": "https://github.com/ShirkNeko/SukiSU-Ultra.git",
+                  "branch": "main",
+                  "key": "sukisu"
+              },
+              {
+                  "name": "ReSuKISU",
+                  "url": "https://github.com/rsuntk/ReSuKISU.git",
+                  "branch": "main",
+                  "key": "resukisu"
+              },
+              {
+                  "name": "xxKSU",
+                  "url": "https://github.com/backslashxx/KernelSU.git",
+                  "branch": "master",
+                  "key": "xxksu"
+              },
+              {
+                  "name": "KernelSU-Next",
+                  "url": "https://github.com/rifs28/KernelSU-Next.git",
+                  "branch": "next",
+                  "key": "ksu_next"
               },
               {
                   "name": "Baseband-Guard",
@@ -74,7 +92,11 @@ jobs:
                   git_cmd = f"git ls-remote {url} refs/heads/{branch}"
                   output = subprocess.check_output(git_cmd, shell=True).decode().strip()
                   if not output:
-                      continue
+                      # Fallback jika branch utama adalah master
+                      git_cmd = f"git ls-remote {url} refs/heads/master"
+                      output = subprocess.check_output(git_cmd, shell=True).decode().strip()
+                      if not output:
+                          continue
                   latest_hash = output.split()[0]
               except Exception as e:
                   print(f"⚠️ Failed to fetch {name}:", e)
@@ -90,17 +112,17 @@ jobs:
                   print(f"🚀 New update found for {name}!")
                   hashes[key] = latest_hash
 
-                  # Kirim Notifikasi Telegram
+                  # Kirim Notifikasi Telegram (Menggunakan HTML Parse Mode agar aman dari error parse)
                   if token and chat_id:
                       clean_url = url.replace(".git", "")
                       commit_url = f"{clean_url}/commit/{latest_hash}"
                       action_url = f"https://github.com/{my_repo}/actions/workflows/build-kernel.yaml"
 
                       text = (
-                          f"🔔 *New Upstream Update Detected!*\n\n"
-                          f"📦 *Project:* `{name}`\n"
-                          f"🔑 *Commit:* [{short_hash}]({commit_url})\n\n"
-                          f"💡 *Action:* Click buttons below to check commit or start building."
+                          f"🔔 <b>New Upstream Update Detected!</b>\n\n"
+                          f"📦 <b>Project:</b> <code>{name}</code>\n"
+                          f"🔑 <b>Commit:</b> <a href='{commit_url}'>{short_hash}</a>\n\n"
+                          f"💡 <i>Click buttons below to check commit or start building.</i>"
                       )
 
                       reply_markup = {
@@ -115,7 +137,7 @@ jobs:
                       data = urllib.parse.urlencode({
                           "chat_id": chat_id,
                           "text": text,
-                          "parse_mode": "Markdown",
+                          "parse_mode": "HTML",
                           "reply_markup": json.dumps(reply_markup),
                           "disable_web_page_preview": "true"
                       }).encode()
