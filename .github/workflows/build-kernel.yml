@@ -244,7 +244,7 @@ jobs:
           repo init -u ./local-manifest -b main
           git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
           repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
-
+          
       - name: Setup KSU Fork ("${{ inputs.ksu_fork }}")
         run: |
           cd kernel-source
@@ -252,8 +252,8 @@ jobs:
           inject_ksu_manual() {
             local repo_url="$1"
             local branch="${2:-main}"
-            echo "📥 Injecting KernelSU directly from $repo_url (Branch:$branch)..."
-            rm -rf drivers/kernelsu
+            echo "📥 Injecting KernelSU directly from $repo_url (Branch: $branch)..."
+            rm -rf drivers/kernelsu KernelSU
             
             if ! git clone --depth=1 -b "$branch" "$repo_url" drivers/kernelsu 2>/dev/null && \
                ! git clone --depth=1 "$repo_url" drivers/kernelsu 2>/dev/null; then
@@ -300,13 +300,14 @@ jobs:
             run_ksu_setup "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" "main" "https://github.com/tiann/KernelSU.git"
           fi
 
-          if [ ! -d "drivers/kernelsu" ]; then
+          if [ ! -d "drivers/kernelsu" ] && [ ! -d "KernelSU" ]; then
             echo "❌ Error: KernelSU directory not found! Setup failed."
             exit 1
           fi
 
+          # Tambahkan opsi -L agar find mengikuti symlink ke KernelSU/kernel/tools/
           echo "🔧 Bypassing strict inline hook check for Non-GKI..."
-          find drivers/kernelsu -name "inline_hook_check.mk" -exec sed -i 's/\$(error/\$(info/g' {} +
+          find -L drivers/kernelsu KernelSU -name "inline_hook_check.mk" 2>/dev/null -exec sed -i 's/\$(error/\$(info/g' {} + || true
 
       - name: Apply Baseband-Guard (BBG)
         if: inputs.include_bbg == true
