@@ -711,9 +711,17 @@ jobs:
             EOF_MARKER="EOF_$(date +%s)"
             echo "CHANGELOG_BODY<<$EOF_MARKER" >> $GITHUB_ENV
             cat "$CHANGELOG_FILE" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV  # Memastikan newline sebelum delimiter penutup
             echo "$EOF_MARKER" >> $GITHUB_ENV
           else
             echo "CHANGELOG_BODY=* No commit log available" >> $GITHUB_ENV
+          fi
+
+          LINK_FILE=$(find release_assets -type f -name "commit_link.txt" | head -n 1)
+          if [ -n "$LINK_FILE" ] && [ -f "$LINK_FILE" ]; then
+            echo "COMMIT_LINK=$(cat "$LINK_FILE")" >> $GITHUB_ENV
+          else
+            echo "COMMIT_LINK=" >> $GITHUB_ENV
           fi
 
           LINK_FILE=$(find release_assets -type f -name "commit_link.txt" | head -n 1)
