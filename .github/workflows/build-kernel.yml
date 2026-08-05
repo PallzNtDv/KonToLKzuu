@@ -267,6 +267,10 @@ jobs:
             echo "Setting up SUKISU..."
             curl -fLSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main || \
             curl -fLSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/master/kernel/setup.sh" | bash -s master
+          elif [ "${{ inputs.ksu_fork }}" = "ReSuKISU" ]; then
+            echo "Setting up ReSuKISU..."
+            curl -fLSs "https://raw.githubusercontent.com/rsuntk/ReSuKISU/main/kernel/setup.sh" | bash -s main || \
+            curl -fLSs "https://raw.githubusercontent.com/rsuntk/ReSuKISU/master/kernel/setup.sh" | bash -s master
           else
             echo "Setting up Official KernelSU..."
             curl -fLSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main || \
