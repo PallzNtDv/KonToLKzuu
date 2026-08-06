@@ -243,8 +243,8 @@ jobs:
 
           repo init -u ./local-manifest -b main
           git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
-          repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
-          
+          repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle  
+
       - name: Setup KSU Fork
         run: |
           cd kernel-source
@@ -297,19 +297,23 @@ jobs:
             exit 1
           fi
 
-          # Sinkronisasi dan perbaikan struktur folder UAPI
-          echo "🔧 Fixing KSU UAPI header directories..."
+          # Sinkronisasi folder UAPI & injeksi include path
+          echo "🔧 Fixing KSU UAPI header directories & includes..."
           mkdir -p drivers/kernelsu/uapi
+          mkdir -p drivers/kernelsu/policy/uapi
           mkdir -p include/uapi
 
-          if [ -d "KernelSU_temp/kernel/uapi" ]; then
-            cp -rf KernelSU_temp/kernel/uapi/* drivers/kernelsu/uapi/ 2>/dev/null || true
+          find KernelSU_temp/ drivers/kernelsu/ -type d -name "uapi" 2>/dev/null | while read -r ufolder; do
+            cp -rf "$ufolder"/* drivers/kernelsu/uapi/ 2>/dev/null || true
+            cp -rf "$ufolder"/* drivers/kernelsu/policy/uapi/ 2>/dev/null || true
+            cp -rf "$ufolder"/* include/uapi/ 2>/dev/null || true
+          done
+
+          if [ -f "drivers/kernelsu/Kbuild" ]; then
+            sed -i '1iccflags-y += -I$(srctree)/drivers/kernelsu -I$(srctree)/drivers/kernelsu/include' drivers/kernelsu/Kbuild
           fi
-          if [ -d "drivers/kernelsu/include/uapi" ]; then
-            cp -rf drivers/kernelsu/include/uapi/* drivers/kernelsu/uapi/ 2>/dev/null || true
-          fi
-          if [ -d "drivers/kernelsu/uapi" ]; then
-            cp -rf drivers/kernelsu/uapi/* include/uapi/ 2>/dev/null || true
+          if [ -f "drivers/kernelsu/Makefile" ]; then
+            sed -i '1iccflags-y += -I$(srctree)/drivers/kernelsu -I$(srctree)/drivers/kernelsu/include' drivers/kernelsu/Makefile
           fi
 
           rm -rf KernelSU_temp
@@ -376,7 +380,6 @@ jobs:
 
           echo "✅ Verification of drivers/kernelsu directory:"
           ls -la drivers/kernelsu/
-          ls -la drivers/kernelsu/uapi/ || true
           
       - name: Apply SUSFS Patch & Configs
         if: inputs.include_susfs == true
