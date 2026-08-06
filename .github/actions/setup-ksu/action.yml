@@ -93,11 +93,8 @@ runs:
         SELINUX_HIDE_FILE="drivers/kernelsu/feature/selinux_hide.c"
         if [ -f "$SELINUX_HIDE_FILE" ]; then
           echo "🔧 Patching missing SELinux identifiers in $SELINUX_HIDE_FILE..."
-          
-          # Inject forward declarations & externs tanpa linux/stdbool.h
           sed -i '1i#include <linux/types.h>\nstruct policydb;\nstruct sidtab;\nextern struct policydb *backup_policydb;\nextern struct sidtab *backup_sidtab;\nextern bool ksu_late_loaded;' "$SELINUX_HIDE_FILE"
 
-          # Definisi fallback jika variabel global belum terdefinisi
           if ! grep -q "^struct policydb \*backup_policydb" "$SELINUX_HIDE_FILE" && ! grep -rq "struct policydb \*backup_policydb" drivers/kernelsu/selinux/ 2>/dev/null; then
             echo "struct policydb *backup_policydb = NULL;" >> "$SELINUX_HIDE_FILE"
             echo "struct sidtab *backup_sidtab = NULL;" >> "$SELINUX_HIDE_FILE"
@@ -105,6 +102,20 @@ runs:
 
           if ! grep -rq "ksu_late_loaded" drivers/kernelsu/core/ 2>/dev/null; then
             echo "bool ksu_late_loaded = false;" >> "$SELINUX_HIDE_FILE"
+          fi
+        fi
+
+        # Fix spesifik untuk ksud_integration.c
+        KSUD_FILE="drivers/kernelsu/runtime/ksud_integration.c"
+        if [ -f "$KSUD_FILE" ]; then
+          echo "🔧 Patching missing runtime identifiers in $KSUD_FILE..."
+          sed -i '1i#include <linux/types.h>\nextern bool ksu_no_custom_rc;\nextern bool ksu_late_loaded;' "$KSUD_FILE"
+
+          if ! grep -rq "bool ksu_no_custom_rc" drivers/kernelsu/ 2>/dev/null; then
+            echo "bool ksu_no_custom_rc = false;" >> "$KSUD_FILE"
+          fi
+          if ! grep -rq "bool ksu_late_loaded" drivers/kernelsu/ 2>/dev/null; then
+            echo "bool ksu_late_loaded = false;" >> "$KSUD_FILE"
           fi
         fi
 
@@ -172,3 +183,4 @@ runs:
 
         echo "✅ Verification of drivers/kernelsu directory:"
         ls -la drivers/kernelsu/
+        
