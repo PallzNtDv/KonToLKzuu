@@ -244,7 +244,7 @@ jobs:
           repo init -u ./local-manifest -b main
           git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
           repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle  
-
+          
       - name: Setup KSU Fork
         run: |
           cd kernel-source
@@ -316,10 +316,11 @@ jobs:
             sed -i '1iccflags-y += -I$(srctree)/drivers/kernelsu -I$(srctree)/drivers/kernelsu/include' drivers/kernelsu/Makefile
           fi
 
-          # Perbaikan undeclared identifier ksu_cred di allowlist.c
-          echo "🔧 Injecting extern ksu_cred declaration into allowlist.c..."
-          find drivers/kernelsu/ -type f -name "allowlist.c" | while read -r file; do
-            if ! grep -q "extern.*ksu_cred" "$file"; then
+          # Mass-inject deklarasi ksu_cred ke SELURUH file C KernelSU yang membutuhkannya
+          echo "🔧 Mass-injecting extern ksu_cred declaration into all KernelSU C files..."
+          find drivers/kernelsu/ -type f -name "*.c" | while read -r file; do
+            if grep -q "ksu_cred" "$file" && ! grep -q "extern.*ksu_cred" "$file"; then
+              echo "  -> Injecting ksu_cred into $file"
               sed -i '1istruct cred;\nextern const struct cred *ksu_cred;' "$file"
             fi
           done
@@ -388,7 +389,7 @@ jobs:
 
           echo "✅ Verification of drivers/kernelsu directory:"
           ls -la drivers/kernelsu/
-          
+                  
       - name: Apply SUSFS Patch & Configs
         if: inputs.include_susfs == true
         run: |
