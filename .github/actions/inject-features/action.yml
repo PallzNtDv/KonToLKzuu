@@ -1,10 +1,14 @@
 name: 'Inject Advanced Kernel Features'
-description: 'Inject customizable kernel features, SUSFS, DroidSpace, and optimizations into defconfig and source tree safely'
+description: 'Inject customizable kernel features, SUSFS, DroidSpace, BBG, and optimizations into defconfig and source tree safely'
 
 inputs:
   defconfig:
     description: 'Target Defconfig File Name'
     required: true
+  enable_bbg:
+    description: 'Enable Baseband-Guard Protection'
+    required: false
+    default: 'true'
   enable_lto_o3:
     description: 'Enable ThinLTO & -O3 Optimizations'
     required: false
@@ -56,7 +60,16 @@ runs:
         }
 
         # -----------------------------------------------------------------
-        # 1. Compiler Optimizations (ThinLTO & -O3)
+        # 1. Baseband-Guard (BBG Protection)
+        # -----------------------------------------------------------------
+        if [ "${{ inputs.enable_bbg }}" = "true" ]; then
+          echo "🛡️ Applying Baseband-guard..."
+          wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash || true
+          set_config "CONFIG_BBG" "y"
+        fi
+
+        # -----------------------------------------------------------------
+        # 2. Compiler Optimizations (ThinLTO & -O3)
         # -----------------------------------------------------------------
         if [ "${{ inputs.enable_lto_o3 }}" = "true" ]; then
           echo "🚀 Injecting Compiler Optimizations (-O3 & ThinLTO)..."
@@ -70,7 +83,7 @@ runs:
         fi
 
         # -----------------------------------------------------------------
-        # 2. WireGuard Protocol (Physical Copy + Anti-Duplicate Fix)
+        # 3. WireGuard Protocol (Physical Copy + Anti-Duplicate Fix)
         # -----------------------------------------------------------------
         if [ "${{ inputs.enable_wireguard }}" = "true" ]; then
           echo "🌐 Installing WireGuard..."
@@ -104,7 +117,7 @@ runs:
         fi
 
         # -----------------------------------------------------------------
-        # 3. F2FS Stable Backport
+        # 4. F2FS Stable Backport
         # -----------------------------------------------------------------
         if [ "${{ inputs.enable_f2fs }}" = "true" ]; then
           echo "💾 Fetching F2FS Backport..."
@@ -123,7 +136,7 @@ runs:
         fi
 
         # -----------------------------------------------------------------
-        # 4. ZRAM ZSTD Compression
+        # 5. ZRAM ZSTD Compression
         # -----------------------------------------------------------------
         if [ "${{ inputs.enable_zstd }}" = "true" ]; then
           echo "📦 Enabling ZRAM ZSTD Compression..."
@@ -136,7 +149,7 @@ runs:
         fi
 
         # -----------------------------------------------------------------
-        # 5. TCP Congestion Control (BBR / Westwood)
+        # 6. TCP Congestion Control (BBR / Westwood)
         # -----------------------------------------------------------------
         if [ "${{ inputs.enable_bbr }}" = "true" ]; then
           echo "⚡ Enabling TCP BBR & Westwood..."
@@ -149,7 +162,7 @@ runs:
         fi
 
         # -----------------------------------------------------------------
-        # 6. TTL / HL Packet Spoofing
+        # 7. TTL / HL Packet Spoofing
         # -----------------------------------------------------------------
         if [ "${{ inputs.enable_ttl }}" = "true" ]; then
           echo "🛡️ Enabling TTL/HL Spoofing..."
@@ -160,7 +173,7 @@ runs:
         fi
 
         # -----------------------------------------------------------------
-        # 7. DroidSpace, Mountify (OverlayFS) & SUSFS Anti-Detection
+        # 8. DroidSpace, Mountify (OverlayFS) & SUSFS Anti-Detection
         # -----------------------------------------------------------------
         if [ "${{ inputs.enable_droidspace }}" = "true" ]; then
           echo "🧱 Enabling DroidSpace & OverlayFS Magic Mount..."
@@ -187,5 +200,5 @@ runs:
           set_config "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT" "y"
           set_config "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT" "y"
         else
-          sed -i '/CONFIG_KSU_SUSFS/d' $DEFCONFIG
+          sed -i '/CONFIG_KSU_SUSFS/d' "$DEFCONFIG"
         fi
