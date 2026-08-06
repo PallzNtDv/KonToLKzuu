@@ -316,6 +316,14 @@ jobs:
             sed -i '1iccflags-y += -I$(srctree)/drivers/kernelsu -I$(srctree)/drivers/kernelsu/include' drivers/kernelsu/Makefile
           fi
 
+          # Perbaikan undeclared identifier ksu_cred di allowlist.c
+          echo "🔧 Injecting extern ksu_cred declaration into allowlist.c..."
+          find drivers/kernelsu/ -type f -name "allowlist.c" | while read -r file; do
+            if ! grep -q "extern.*ksu_cred" "$file"; then
+              sed -i '1istruct cred;\nextern const struct cred *ksu_cred;' "$file"
+            fi
+          done
+
           rm -rf KernelSU_temp
 
           sed -i 's|source "KernelSU/Kconfig"|source "drivers/kernelsu/Kconfig"|g' drivers/Kconfig
