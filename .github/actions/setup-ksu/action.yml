@@ -119,8 +119,15 @@ runs:
           fi
         fi
 
-        # Force generate susfs_def.h dengan seluruh definisi makro CMD_SUSFS_*
-        echo "🔧 Overriding and generating full susfs_def.h header..."
+        # Injeksi langsung seluruh makro CMD_SUSFS_* ke dispatch.c
+        DISPATCH_FILE="drivers/kernelsu/supercall/dispatch.c"
+        if [ -f "$DISPATCH_FILE" ]; then
+          echo "🔧 Direct patching CMD_SUSFS macros into $DISPATCH_FILE..."
+          sed -i '1i#include <linux/types.h>\n#ifndef KERNEL_SU_VERSION\n#define KERNEL_SU_VERSION 11872\n#endif\nextern bool ksu_late_loaded;\n#ifndef CMD_SUSFS_ADD_SUS_PATH\n#define CMD_SUSFS_ADD_SUS_PATH 0x55555\n#define CMD_SUSFS_ADD_SUS_PATH_LOOP 0x55556\n#define CMD_SUSFS_HIDE_SUS_MNTS_FOR_NON_SU_PROCS 0x55557\n#define CMD_SUSFS_ADD_SUS_KSTAT 0x55558\n#define CMD_SUSFS_UPDATE_SUS_KSTAT 0x55559\n#define CMD_SUSFS_ADD_SUS_KSTAT_STATICALLY 0x5555a\n#define CMD_SUSFS_SET_UNAME 0x5555b\n#define CMD_SUSFS_ENABLE_LOG 0x5555c\n#define CMD_SUSFS_SET_CMDLINE_OR_BOOTCONFIG 0x5555d\n#define CMD_SUSFS_ADD_OPEN_REDIRECT 0x5555e\n#define CMD_SUSFS_ADD_SUS_MAP 0x5555f\n#define CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING 0x55560\n#define CMD_SUSFS_SHOW_ENABLED_FEATURES 0x55561\n#define CMD_SUSFS_SHOW_VARIANT 0x55562\n#define CMD_SUSFS_SHOW_VERSION 0x55563\n#endif' "$DISPATCH_FILE"
+        fi
+
+        # Generasi susfs_def.h global untuk module lainnya
+        echo "🔧 Generating global susfs_def.h header..."
         mkdir -p include/linux
         mkdir -p drivers/kernelsu/include/linux
 
@@ -158,60 +165,25 @@ runs:
           '' \
           '#ifndef CMD_SUSFS_ADD_SUS_PATH' \
           '#define CMD_SUSFS_ADD_SUS_PATH 0x55555' \
-          '#endif' \
-          '#ifndef CMD_SUSFS_ADD_SUS_PATH_LOOP' \
           '#define CMD_SUSFS_ADD_SUS_PATH_LOOP 0x55556' \
-          '#endif' \
-          '#ifndef CMD_SUSFS_HIDE_SUS_MNTS_FOR_NON_SU_PROCS' \
           '#define CMD_SUSFS_HIDE_SUS_MNTS_FOR_NON_SU_PROCS 0x55557' \
-          '#endif' \
-          '#ifndef CMD_SUSFS_ADD_SUS_KSTAT' \
           '#define CMD_SUSFS_ADD_SUS_KSTAT 0x55558' \
-          '#endif' \
-          '#ifndef CMD_SUSFS_UPDATE_SUS_KSTAT' \
           '#define CMD_SUSFS_UPDATE_SUS_KSTAT 0x55559' \
-          '#endif' \
-          '#ifndef CMD_SUSFS_ADD_SUS_KSTAT_STATICALLY' \
           '#define CMD_SUSFS_ADD_SUS_KSTAT_STATICALLY 0x5555a' \
-          '#endif' \
-          '#ifndef CMD_SUSFS_SET_UNAME' \
           '#define CMD_SUSFS_SET_UNAME 0x5555b' \
-          '#endif' \
-          '#ifndef CMD_SUSFS_ENABLE_LOG' \
           '#define CMD_SUSFS_ENABLE_LOG 0x5555c' \
-          '#endif' \
-          '#ifndef CMD_SUSFS_SET_CMDLINE_OR_BOOTCONFIG' \
           '#define CMD_SUSFS_SET_CMDLINE_OR_BOOTCONFIG 0x5555d' \
-          '#endif' \
-          '#ifndef CMD_SUSFS_ADD_OPEN_REDIRECT' \
           '#define CMD_SUSFS_ADD_OPEN_REDIRECT 0x5555e' \
-          '#endif' \
-          '#ifndef CMD_SUSFS_ADD_SUS_MAP' \
           '#define CMD_SUSFS_ADD_SUS_MAP 0x5555f' \
-          '#endif' \
-          '#ifndef CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING' \
           '#define CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING 0x55560' \
-          '#endif' \
-          '#ifndef CMD_SUSFS_SHOW_ENABLED_FEATURES' \
           '#define CMD_SUSFS_SHOW_ENABLED_FEATURES 0x55561' \
-          '#endif' \
-          '#ifndef CMD_SUSFS_SHOW_VARIANT' \
           '#define CMD_SUSFS_SHOW_VARIANT 0x55562' \
-          '#endif' \
-          '#ifndef CMD_SUSFS_SHOW_VERSION' \
           '#define CMD_SUSFS_SHOW_VERSION 0x55563' \
           '#endif' \
           '' \
           '#endif /* _SUSFS_DEF_H */' > include/linux/susfs_def.h
 
         cp -f include/linux/susfs_def.h drivers/kernelsu/include/linux/susfs_def.h 2>/dev/null || true
-
-        # Fix spesifik untuk supercall/dispatch.c
-        DISPATCH_FILE="drivers/kernelsu/supercall/dispatch.c"
-        if [ -f "$DISPATCH_FILE" ]; then
-          echo "🔧 Patching missing identifiers & header includes in $DISPATCH_FILE..."
-          sed -i '1i#include <linux/types.h>\n#include <linux/susfs_def.h>\n#ifndef KERNEL_SU_VERSION\n#define KERNEL_SU_VERSION 11872\n#endif\nextern bool ksu_late_loaded;' "$DISPATCH_FILE"
-        fi
 
         rm -rf KernelSU_temp
 
