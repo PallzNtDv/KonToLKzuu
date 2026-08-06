@@ -192,18 +192,11 @@ jobs:
         if: inputs.include_susfs == true
         uses: ./.github/actions/apply-susfs
           
-      - name: Apply Baseband-Guard (BBG)
-        if: inputs.include_bbg == true
-        run: |
-          cd kernel-source
-          echo "Applying Baseband-guard..."
-          wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash || true
-          echo "CONFIG_BBG=y" >> arch/arm64/configs/$KERNEL_DEFCONFIG
-          
       - name: Inject Selected Kernel Features
         uses: ./.github/actions/inject-features
         with:
           defconfig: ${{ env.KERNEL_DEFCONFIG }}
+          enable_bbg: ${{ inputs.include_bbg }}
           enable_lto_o3: ${{ inputs.include_lto_o3 }}
           enable_wireguard: ${{ inputs.include_wireguard }}
           enable_f2fs: ${{ inputs.include_f2fs }}
