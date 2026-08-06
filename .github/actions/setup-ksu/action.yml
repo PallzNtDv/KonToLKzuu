@@ -119,8 +119,8 @@ runs:
           fi
         fi
 
-        # Force generate header susfs_def.h dengan seluruh definisi makro CMD_SUSFS_*
-        echo "🔧 Generating complete susfs_def.h header..."
+        # Force generate susfs_def.h dengan seluruh definisi makro CMD_SUSFS_*
+        echo "🔧 Overriding and generating full susfs_def.h header..."
         mkdir -p include/linux
         mkdir -p drivers/kernelsu/include/linux
 
