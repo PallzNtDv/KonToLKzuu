@@ -89,15 +89,15 @@ runs:
           fi
         done
 
-        # Fix spesifik untuk selinux_hide.c (backup_policydb, backup_sidtab, ksu_late_loaded)
+        # Fix spesifik untuk selinux_hide.c
         SELINUX_HIDE_FILE="drivers/kernelsu/feature/selinux_hide.c"
         if [ -f "$SELINUX_HIDE_FILE" ]; then
           echo "🔧 Patching missing SELinux identifiers in $SELINUX_HIDE_FILE..."
           
-          # Inject forward declarations & externs di bagian atas file
-          sed -i '1i#include <linux/types.h>\n#include <linux/stdbool.h>\nstruct policydb;\nstruct sidtab;\nextern struct policydb *backup_policydb;\nextern struct sidtab *backup_sidtab;\nextern bool ksu_late_loaded;' "$SELINUX_HIDE_FILE"
+          # Inject forward declarations & externs tanpa linux/stdbool.h
+          sed -i '1i#include <linux/types.h>\nstruct policydb;\nstruct sidtab;\nextern struct policydb *backup_policydb;\nextern struct sidtab *backup_sidtab;\nextern bool ksu_late_loaded;' "$SELINUX_HIDE_FILE"
 
-          # Jika variabel global tidak didefinisikan di tempat lain, sediakan definisi fallback di selinux_hide.c
+          # Definisi fallback jika variabel global belum terdefinisi
           if ! grep -q "^struct policydb \*backup_policydb" "$SELINUX_HIDE_FILE" && ! grep -rq "struct policydb \*backup_policydb" drivers/kernelsu/selinux/ 2>/dev/null; then
             echo "struct policydb *backup_policydb = NULL;" >> "$SELINUX_HIDE_FILE"
             echo "struct sidtab *backup_sidtab = NULL;" >> "$SELINUX_HIDE_FILE"
