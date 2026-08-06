@@ -61,7 +61,7 @@ runs:
           exit 1
         fi
 
-        # Sinkronisasi folder UAPI & injeksi include path + KERNEL_SU_VERSION
+        # Sinkronisasi folder UAPI & injeksi include path (tanpa duplikasi KSU_VERSION)
         echo "🔧 Fixing KSU UAPI header directories & includes..."
         mkdir -p drivers/kernelsu/uapi
         mkdir -p drivers/kernelsu/policy/uapi
@@ -74,10 +74,10 @@ runs:
         done
 
         if [ -f "drivers/kernelsu/Kbuild" ]; then
-          sed -i '1iccflags-y += -I$(srctree)/drivers/kernelsu -I$(srctree)/drivers/kernelsu/include -DKERNEL_SU_VERSION=11872 -DKSU_VERSION=11872' drivers/kernelsu/Kbuild
+          sed -i '1iccflags-y += -I$(srctree)/drivers/kernelsu -I$(srctree)/drivers/kernelsu/include -DKERNEL_SU_VERSION=11872' drivers/kernelsu/Kbuild
         fi
         if [ -f "drivers/kernelsu/Makefile" ]; then
-          sed -i '1iccflags-y += -I$(srctree)/drivers/kernelsu -I$(srctree)/drivers/kernelsu/include -DKERNEL_SU_VERSION=11872 -DKSU_VERSION=11872' drivers/kernelsu/Makefile
+          sed -i '1iccflags-y += -I$(srctree)/drivers/kernelsu -I$(srctree)/drivers/kernelsu/include -DKERNEL_SU_VERSION=11872' drivers/kernelsu/Makefile
         fi
 
         # Injeksi ksu_cred secara presisi
@@ -119,14 +119,21 @@ runs:
           fi
         fi
 
-        # Injeksi langsung seluruh makro CMD_SUSFS_* ke dispatch.c
+        # Fix spesifik untuk supercall/dispatch.c
         DISPATCH_FILE="drivers/kernelsu/supercall/dispatch.c"
         if [ -f "$DISPATCH_FILE" ]; then
           echo "🔧 Direct patching CMD_SUSFS macros into $DISPATCH_FILE..."
           sed -i '1i#include <linux/types.h>\n#ifndef KERNEL_SU_VERSION\n#define KERNEL_SU_VERSION 11872\n#endif\nextern bool ksu_late_loaded;\n#ifndef CMD_SUSFS_ADD_SUS_PATH\n#define CMD_SUSFS_ADD_SUS_PATH 0x55555\n#define CMD_SUSFS_ADD_SUS_PATH_LOOP 0x55556\n#define CMD_SUSFS_HIDE_SUS_MNTS_FOR_NON_SU_PROCS 0x55557\n#define CMD_SUSFS_ADD_SUS_KSTAT 0x55558\n#define CMD_SUSFS_UPDATE_SUS_KSTAT 0x55559\n#define CMD_SUSFS_ADD_SUS_KSTAT_STATICALLY 0x5555a\n#define CMD_SUSFS_SET_UNAME 0x5555b\n#define CMD_SUSFS_ENABLE_LOG 0x5555c\n#define CMD_SUSFS_SET_CMDLINE_OR_BOOTCONFIG 0x5555d\n#define CMD_SUSFS_ADD_OPEN_REDIRECT 0x5555e\n#define CMD_SUSFS_ADD_SUS_MAP 0x5555f\n#define CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING 0x55560\n#define CMD_SUSFS_SHOW_ENABLED_FEATURES 0x55561\n#define CMD_SUSFS_SHOW_VARIANT 0x55562\n#define CMD_SUSFS_SHOW_VERSION 0x55563\n#endif' "$DISPATCH_FILE"
         fi
 
-        # Generasi susfs_def.h global untuk module lainnya
+        # Fix spesifik untuk supercall/supercall.c (SUSFS_MAGIC)
+        SUPERCALL_FILE="drivers/kernelsu/supercall/supercall.c"
+        if [ -f "$SUPERCALL_FILE" ]; then
+          echo "🔧 Direct patching SUSFS_MAGIC into $SUPERCALL_FILE..."
+          sed -i '1i#include <linux/types.h>\n#include <linux/susfs_def.h>\n#ifndef SUSFS_MAGIC\n#define SUSFS_MAGIC 0xA5A5A5A5\n#endif' "$SUPERCALL_FILE"
+        fi
+
+        # Generasi susfs_def.h global dengan SUSFS_MAGIC
         echo "🔧 Generating global susfs_def.h header..."
         mkdir -p include/linux
         mkdir -p drivers/kernelsu/include/linux
@@ -136,6 +143,10 @@ runs:
           '#define _SUSFS_DEF_H' \
           '' \
           '#include <linux/types.h>' \
+          '' \
+          '#ifndef SUSFS_MAGIC' \
+          '#define SUSFS_MAGIC 0xA5A5A5A5' \
+          '#endif' \
           '' \
           '#ifndef TASK_STRUCT_NON_ROOT_USER_APP_PROC' \
           '#define TASK_STRUCT_NON_ROOT_USER_APP_PROC (1 << 0)' \
@@ -203,4 +214,3 @@ runs:
 
         echo "✅ Verification of drivers/kernelsu directory:"
         ls -la drivers/kernelsu/
-        
