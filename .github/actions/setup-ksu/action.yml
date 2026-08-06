@@ -80,7 +80,7 @@ runs:
           sed -i '1iccflags-y += -I$(srctree)/drivers/kernelsu -I$(srctree)/drivers/kernelsu/include' drivers/kernelsu/Makefile
         fi
 
-        # Injeksi ksu_cred secara aman
+        # Injeksi ksu_cred secara presisi
         echo "🔧 Injecting extern ksu_cred declaration safely into KernelSU C files..."
         find drivers/kernelsu/ -type f -name "*.c" | while read -r file; do
           if grep -q "ksu_cred" "$file" && ! grep -q "struct cred \*ksu_cred" "$file" && ! grep -q "extern.*ksu_cred" "$file"; then
@@ -88,6 +88,25 @@ runs:
             sed -i '1istruct cred;\nextern struct cred *ksu_cred;' "$file"
           fi
         done
+
+        # Fix spesifik untuk selinux_hide.c (backup_policydb, backup_sidtab, ksu_late_loaded)
+        SELINUX_HIDE_FILE="drivers/kernelsu/feature/selinux_hide.c"
+        if [ -f "$SELINUX_HIDE_FILE" ]; then
+          echo "🔧 Patching missing SELinux identifiers in $SELINUX_HIDE_FILE..."
+          
+          # Inject forward declarations & externs di bagian atas file
+          sed -i '1i#include <linux/types.h>\n#include <linux/stdbool.h>\nstruct policydb;\nstruct sidtab;\nextern struct policydb *backup_policydb;\nextern struct sidtab *backup_sidtab;\nextern bool ksu_late_loaded;' "$SELINUX_HIDE_FILE"
+
+          # Jika variabel global tidak didefinisikan di tempat lain, sediakan definisi fallback di selinux_hide.c
+          if ! grep -q "^struct policydb \*backup_policydb" "$SELINUX_HIDE_FILE" && ! grep -rq "struct policydb \*backup_policydb" drivers/kernelsu/selinux/ 2>/dev/null; then
+            echo "struct policydb *backup_policydb = NULL;" >> "$SELINUX_HIDE_FILE"
+            echo "struct sidtab *backup_sidtab = NULL;" >> "$SELINUX_HIDE_FILE"
+          fi
+
+          if ! grep -rq "ksu_late_loaded" drivers/kernelsu/core/ 2>/dev/null; then
+            echo "bool ksu_late_loaded = false;" >> "$SELINUX_HIDE_FILE"
+          fi
+        fi
 
         rm -rf KernelSU_temp
 
@@ -153,4 +172,3 @@ runs:
 
         echo "✅ Verification of drivers/kernelsu directory:"
         ls -la drivers/kernelsu/
-        
