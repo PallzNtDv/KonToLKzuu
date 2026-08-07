@@ -32,7 +32,7 @@ runs:
         cd AnyKernel3
 
         # -----------------------------------------------------------------
-        # PENANGANAN KERNEL IMAGE (Prioritas: Image.gz-dtb)
+        # PENANGANAN KERNEL IMAGE
         # -----------------------------------------------------------------
         OUT_DIR="../kernel-source/out/arch/arm64/boot"
 
@@ -46,21 +46,12 @@ runs:
           echo "✅ Found Image! Copying to AnyKernel3..."
           cp "${OUT_DIR}/Image" .
         else
-          echo "❌ Error: No valid kernel image (Image.gz-dtb / Image.gz / Image) found in ${OUT_DIR}!"
+          echo "❌ Error: No valid kernel image found in ${OUT_DIR}!"
           exit 1
         fi
 
-        # Copy DTB terpisah jika ada
-        if [ -f "${OUT_DIR}/dtb" ]; then
-          echo "ℹ️ Found separate dtb file, copying..."
-          cp "${OUT_DIR}/dtb" .
-        fi
-
-        # Copy DTBO terpisah jika ada
-        if [ -f "${OUT_DIR}/dtbo.img" ]; then
-          echo "ℹ️ Found dtbo.img file, copying..."
-          cp "${OUT_DIR}/dtbo.img" .
-        fi
+        [ -f "${OUT_DIR}/dtb" ] && cp "${OUT_DIR}/dtb" .
+        [ -f "${OUT_DIR}/dtbo.img" ] && cp "${OUT_DIR}/dtbo.img" .
 
         # -----------------------------------------------------------------
         # TAGGING & NAMING SETUP
@@ -74,73 +65,71 @@ runs:
         [ "${{ inputs.include_bbr }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-BBR"
 
         # -----------------------------------------------------------------
-        # GENERATE ANYKERNEL.SH
+        # GENERATE ANYKERNEL.SH (FIXED HERE-DOC SYNTAX)
         # -----------------------------------------------------------------
-        cat << '        EOF_AK3' | sed 's/^        //' > anykernel.sh
-        # AnyKernel3 Ramdisk Mod Script for Xiaomi Camellia (MT6833)
-        # osm0sis @ xda-developers
+        cat << 'EOF_AK3' > anykernel.sh
+# AnyKernel3 Ramdisk Mod Script for Xiaomi Camellia (MT6833)
+# osm0sis @ xda-developers
 
-        ## AnyKernel setup
-        properties() { '
-        kernel.string=Lotus Kernel for Xiaomi Camellia
-        do.devicecheck=1
-        do.modules=0
-        do.systemless=1
-        do.cleanup=1
-        do.cleanuponabort=0
-        device.name1=camellia
-        device.name2=camellian
-        supported.versions=
-        supported.patchlevels=
-        '; } # end properties
+## AnyKernel setup
+properties() { '
+kernel.string=Lotus Kernel for Xiaomi Camellia
+do.devicecheck=1
+do.modules=0
+do.systemless=1
+do.cleanup=1
+do.cleanuponabort=0
+device.name1=camellia
+device.name2=camellian
+supported.versions=
+supported.patchlevels=
+'; } # end properties
 
-        ## AnyKernel install
-        boot_attributes() {
-        set_perm_recursive 0 0 755 644 $RAMDISK/*;
-        set_perm_recursive 0 0 750 750 $RAMDISK/init* $RAMDISK/sbin;
-        } # end attributes
+## AnyKernel install
+boot_attributes() {
+set_perm_recursive 0 0 755 644 $RAMDISK/*;
+set_perm_recursive 0 0 750 750 $RAMDISK/init* $RAMDISK/sbin;
+} # end attributes
 
-        # boot shell variables
-        block=auto;
-        is_slot_device=auto;
-        ramdisk_compression=auto;
-        patch_vbmeta_flag=auto;
+# boot shell variables
+block=auto;
+is_slot_device=auto;
+ramdisk_compression=auto;
+patch_vbmeta_flag=auto;
 
-        # Import fungsi utama AnyKernel (WAJIB PERTAMA)
-        . tools/ak3-core.sh;
+# Import fungsi utama AnyKernel
+. tools/ak3-core.sh;
 
-        # Fix O3BFD File Descriptor agar ui_print muncul di TWRP / OrangeFox modern
-        if [ -z "$O3BFD" ] || [ ! -e "/proc/self/fd/$O3BFD" ]; then
-          for fd in 1 2 3 0; do
-            if [ -e "/proc/self/fd/$fd" ]; then
-              O3BFD=$fd;
-              break;
-            fi;
-          done;
-        fi;
+# Fix O3BFD File Descriptor
+if [ -z "$O3BFD" ] || [ ! -e "/proc/self/fd/$O3BFD" ]; then
+  for fd in 1 2 3 0; do
+    if [ -e "/proc/self/fd/$fd" ]; then
+      O3BFD=$fd;
+      break;
+    fi;
+  done;
+fi;
 
-        # Print Full Cyber ASCII Banner
-        ui_print "==================================================";
-        ui_print " #    ####  ##### #   #  ###   ### #  ####  #   # ";
-        ui_print " #   #    #   #   #   # #     #    # #     # #  # ";
-        ui_print " #   #    #   #   #   #  ###  #    ##      #  # # ";
-        ui_print " #   #    #   #   #   #     # #    # #     #   ## ";
-        ui_print " ###  ####    #    ###  ####   ### #  #### #    # ";
-        ui_print "==================================================";
-        ui_print "               LOTUS-KERNEL CUSTOM                ";
-        ui_print "==================================================";
-        ui_print " [>] Device   : Xiaomi Camellia (Redmi Note 10 5G)";
-        ui_print " [>] Kernel   : Linux 4.14.x";
-        ui_print "==================================================";
+# Print Full Cyber ASCII Banner
+ui_print "==================================================";
+ui_print " #    ####  ##### #   #  ###   ### #  ####  #   # ";
+ui_print " #   #    #   #   #   # #     #    # #     # #  # ";
+ui_print " #   #    #   #   #   #  ###  #    ##      #  # # ";
+ui_print " #   #    #   #   #   #     # #    # #     #   ## ";
+ui_print " ###  ####    #    ###  ####   ### #  #### #    # ";
+ui_print "==================================================";
+ui_print "               LOTUS-KERNEL CUSTOM                ";
+ui_print "==================================================";
+ui_print " [>] Device   : Xiaomi Camellia (Redmi Note 10 5G)";
+ui_print " [>] Kernel   : Linux 4.14.x";
+ui_print "==================================================";
 
-        # Jeda 2 detik agar banner sempat terbaca di recovery
-        sleep 2;
+sleep 2;
 
-        # Eksekusi Patching & Flashing Boot
-        split_boot;
-        flash_boot;
-        flash_dtbo;
-        EOF_AK3
+split_boot;
+flash_boot;
+flash_dtbo;
+EOF_AK3
 
         # -----------------------------------------------------------------
         # BUILD ZIP & SHA256 DI ROOT WORKSPACE (..)
@@ -155,7 +144,7 @@ runs:
         echo "✅ Created SHA256 checksum: ${ZIP_NAME}.sha256"
 
         # -----------------------------------------------------------------
-        # GENERATE CHANGELOG & COMMIT LINK (Memastikan File Selalu Ada)
+        # GENERATE CHANGELOG & COMMIT LINK
         # -----------------------------------------------------------------
         if [ -d "kernel-source" ]; then
           cd kernel-source
@@ -174,4 +163,3 @@ runs:
           echo "https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}" > commit_link.txt
         fi
         echo "✅ Generated changelog.txt & commit_link.txt!"
-        
