@@ -316,7 +316,7 @@ jobs:
             *.sha256
             changelog.txt
             commit_link.txt
-          if-no-files-found: error # Akibat baris ini, workflow akan error/merah jika ZIP tidak terdeteksi
+          if-no-files-found: error
 
       - name: Send Telegram Failure Notification & Cancel Jobs
         if: failure()
