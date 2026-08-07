@@ -152,14 +152,21 @@ jobs:
           include_bbg: ${{ inputs.include_bbg }}
           include_bbr: ${{ inputs.include_bbr }}
 
+      - name: Debug Workspace Files
+        run: |
+          echo "📂 File di Root Workspace:"
+          ls -la
+          echo "📂 File di AnyKernel3:"
+          ls -la AnyKernel3/ || true
+
       - name: Upload Kernel Release Assets
         uses: actions/upload-artifact@v4
         with:
           name: kernel-assets
           path: |
-            *.zip
-            *.sha256
-            *.txt
+            **/*.zip
+            **/*.sha256
+            **/*.txt
           if-no-files-found: error
 
       - name: Send Telegram Failure Notification & Cancel Jobs
