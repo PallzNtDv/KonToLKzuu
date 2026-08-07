@@ -159,8 +159,7 @@ jobs:
           path: |
             *.zip
             *.sha256
-            changelog.txt
-            commit_link.txt
+            *.txt
           if-no-files-found: error
 
       - name: Send Telegram Failure Notification & Cancel Jobs
