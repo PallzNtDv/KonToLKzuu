@@ -593,6 +593,10 @@ jobs:
           ZSTD: "${{ inputs.include_zstd }}"
           BBR: "${{ inputs.include_bbr }}"
           TTL: "${{ inputs.include_ttl }}"
+          COMMIT_LINK: "${{ env.COMMIT_LINK }}"
+          GH_SERVER: "${{ github.server_url }}"
+          GH_REPO: "${{ github.repository }}"
+          GH_SHA: "${{ github.sha }}"
         run: |
           python3 << 'EOF'
           import os, subprocess
@@ -626,9 +630,8 @@ jobs:
           ]
           feature_str = "\n".join([f"• {f}" for f in feature_list])
 
-          # Cari file changelog.txt & commit_link.txt dengan os.walk
+          # 1. Cari Changelog
           changelog_str = ""
-          commit_link = ""
           for root, _, files in os.walk("release_assets"):
               for f in files:
                   if f == "changelog.txt" and not changelog_str:
@@ -636,12 +639,26 @@ jobs:
                           changelog_str = cl.read().strip()
                           if len(changelog_str) > 300:
                               changelog_str = changelog_str[:300] + "\n... (truncated)"
-                  elif f == "commit_link.txt" and not commit_link:
-                      with open(os.path.join(root, f), "r") as cl:
-                          commit_link = cl.read().strip()
+
+          # 2. Cari Commit Link (dengan Fallback Otomatis)
+          commit_link = os.environ.get("COMMIT_LINK", "").strip()
+          if not commit_link:
+              for root, _, files in os.walk("release_assets"):
+                  for f in files:
+                      if f == "commit_link.txt":
+                          with open(os.path.join(root, f), "r") as cl:
+                              commit_link = cl.read().strip()
+                          break
+
+          # Fallback ke Commit URL Github Actions jika commit_link.txt kosong
+          if not commit_link:
+              server = os.environ.get("GH_SERVER", "https://github.com")
+              repo = os.environ.get("GH_REPO", "")
+              sha = os.environ.get("GH_SHA", "")
+              if repo and sha:
+                  commit_link = f"{server}/{repo}/commit/{sha}"
 
           if token and chat_id:
-              # Gunakan os.walk agar 100% menemukan ZIP di root maupun subfolder
               zips = []
               apks = []
               for root, _, files in os.walk("release_assets"):
@@ -662,7 +679,6 @@ jobs:
                       with open(sha_file_path, "r") as f:
                           sha_hash = f.read().strip().split()[0]
                   else:
-                      # Fallback cari sha256 dimanapun berada
                       for root, _, files in os.walk("release_assets"):
                           if f"{name}.sha256" in files:
                               with open(os.path.join(root, f"{name}.sha256"), "r") as f:
