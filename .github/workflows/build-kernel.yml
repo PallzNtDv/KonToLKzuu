@@ -599,11 +599,10 @@ jobs:
           GH_SHA: "${{ github.sha }}"
         run: |
           python3 << 'EOF'
-          import os, subprocess
+          import os, subprocess, json
 
           token = os.environ.get("TELEGRAM_TOKEN")
           chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-          manifest = os.environ.get("MANIFEST", "")
           ksu = os.environ.get("KSU", "")
 
           susfs = os.environ.get("SUSFS") == "true"
@@ -630,7 +629,7 @@ jobs:
           ]
           feature_str = "\n".join([f"• {f}" for f in feature_list])
 
-          # 1. Cari Changelog
+          # Read Changelog
           changelog_str = ""
           for root, _, files in os.walk("release_assets"):
               for f in files:
@@ -640,17 +639,8 @@ jobs:
                           if len(changelog_str) > 300:
                               changelog_str = changelog_str[:300] + "\n... (truncated)"
 
-          # 2. Cari Commit Link (dengan Fallback Otomatis)
+          # Read Commit Link
           commit_link = os.environ.get("COMMIT_LINK", "").strip()
-          if not commit_link:
-              for root, _, files in os.walk("release_assets"):
-                  for f in files:
-                      if f == "commit_link.txt":
-                          with open(os.path.join(root, f), "r") as cl:
-                              commit_link = cl.read().strip()
-                          break
-
-          # Fallback ke Commit URL Github Actions jika commit_link.txt kosong
           if not commit_link:
               server = os.environ.get("GH_SERVER", "https://github.com")
               repo = os.environ.get("GH_REPO", "")
@@ -658,9 +648,32 @@ jobs:
               if repo and sha:
                   commit_link = f"{server}/{repo}/commit/{sha}"
 
+          def send_doc(file_path, caption_text):
+              # Check 50MB Telegram limit
+              file_size = os.path.getsize(file_path)
+              if file_size > 52428800:
+                  print(f"⚠️ ERROR: File {file_path} > 50MB ({file_size/1024/1024:.2f} MB). Telegram limit reached!")
+                  return
+
+              cmd = [
+                  "curl", "-s",
+                  "-F", f"chat_id={chat_id}",
+                  "-F", f"document=@{file_path}",
+                  "-F", f"caption={caption_text}",
+                  f"https://api.telegram.org/bot{token}/sendDocument"
+              ]
+              res = subprocess.run(cmd, capture_output=True, text=True)
+              try:
+                  resp = json.loads(res.stdout)
+                  if resp.get("ok"):
+                      print(f"✅ Telegram Sent: {os.path.basename(file_path)}")
+                  else:
+                      print(f"❌ Telegram Rejected [{os.path.basename(file_path)}]: {resp.get('description')}")
+              except Exception as e:
+                  print(f"❌ Response Error: {res.stdout}")
+
           if token and chat_id:
-              zips = []
-              apks = []
+              zips, apks = [], []
               for root, _, files in os.walk("release_assets"):
                   for f in files:
                       if f.endswith(".zip"):
@@ -674,60 +687,37 @@ jobs:
                   size = subprocess.check_output(["du", "-h", zip_file]).decode().split()[0]
                   
                   sha_hash = "N/A"
-                  sha_file_path = f"{zip_file}.sha256"
-                  if os.path.exists(sha_file_path):
-                      with open(sha_file_path, "r") as f:
-                          sha_hash = f.read().strip().split()[0]
-                  else:
-                      for root, _, files in os.walk("release_assets"):
-                          if f"{name}.sha256" in files:
-                              with open(os.path.join(root, f"{name}.sha256"), "r") as f:
-                                  sha_hash = f.read().strip().split()[0]
-                              break
+                  for root, _, files in os.walk("release_assets"):
+                      if f"{name}.sha256" in files:
+                          with open(os.path.join(root, f"{name}.sha256"), "r") as f:
+                              sha_hash = f.read().strip().split()[0]
+                          break
 
-                  link_md = f"\n🔗 [View Full Commit History]({commit_link})" if commit_link else ""
+                  link_str = f"\n🔗 Full Commit History: {commit_link}" if commit_link else ""
 
                   caption = (
-                      f"⚡ *Lotus-V1-{ksu} Kernel Ready!*\n\n"
-                      f"📱 *Device:* Redmi Note 10 5G / Poco M3 Pro 5G (camellia/camellian)\n"
-                      f"⚙️ *KSU Engine:* {ksu}\n\n"
-                      f"🛠️ *Active Features:*\n{feature_str}\n\n"
-                      f"📋 *Recent Commits:*\n{changelog_str}{link_md}\n\n"
-                      f"📦 *File:* `{name}`\n"
-                      f"📊 *Size:* {size}\n"
-                      f"🔑 *SHA256:* `{sha_hash}`"
+                      f"⚡ Lotus-V1-{ksu} Kernel Ready!\n\n"
+                      f"📱 Device: Redmi Note 10 5G / Poco M3 Pro 5G (camellia/camellian)\n"
+                      f"⚙️ KSU Engine: {ksu}\n\n"
+                      f"🛠️ Active Features:\n{feature_str}\n\n"
+                      f"📋 Recent Commits:\n{changelog_str}{link_str}\n\n"
+                      f"📦 File: {name}\n"
+                      f"📊 Size: {size}\n"
+                      f"🔑 SHA256: {sha_hash}"
                   )
-                  cmd = [
-                      "curl", "-s",
-                      "-F", f"chat_id={chat_id}",
-                      "-F", f"document=@{zip_file}",
-                      "-F", f"caption={caption}",
-                      "-F", "parse_mode=Markdown",
-                      f"https://api.telegram.org/bot{token}/sendDocument"
-                  ]
-                  res = subprocess.run(cmd, capture_output=True, text=True)
-                  print(f"✅ Telegram Kernel Sent: {name} | Response: {res.stdout}")
+                  send_doc(zip_file, caption)
 
               print(f"📱 Found APK files: {apks}")
               for apk_file in apks:
                   name = os.path.basename(apk_file)
                   size = subprocess.check_output(["du", "-h", apk_file]).decode().split()[0]
                   caption = (
-                      f"📱 *KSU Manager App!*\n\n"
-                      f"⚙️ *KSU Engine:* {ksu}\n"
-                      f"📦 *File:* `{name}`\n"
-                      f"📊 *Size:* {size}"
+                      f"📱 KSU Manager App!\n\n"
+                      f"⚙️ KSU Engine: {ksu}\n"
+                      f"📦 File: {name}\n"
+                      f"📊 Size: {size}"
                   )
-                  cmd = [
-                      "curl", "-s",
-                      "-F", f"chat_id={chat_id}",
-                      "-F", f"document=@{apk_file}",
-                      "-F", f"caption={caption}",
-                      "-F", "parse_mode=Markdown",
-                      f"https://api.telegram.org/bot{token}/sendDocument"
-                  ]
-                  res = subprocess.run(cmd, capture_output=True, text=True)
-                  print(f"✅ Telegram Manager Sent: {name} | Response: {res.stdout}")
+                  send_doc(apk_file, caption)
           else:
               print("⚠️ Telegram Token or Chat ID is missing!")
           EOF
