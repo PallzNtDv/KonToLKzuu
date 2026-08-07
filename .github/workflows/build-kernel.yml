@@ -307,6 +307,14 @@ jobs:
           include_bbg: ${{ inputs.include_bbg }}
           include_bbr: ${{ inputs.include_bbr }}
 
+      # Step debug untuk melihat file apa saja yang ada di root workspace
+      - name: Debug Workspace Files
+        run: |
+          echo "📂 File di Root Workspace:"
+          ls -la
+          echo "📂 File di AnyKernel3:"
+          ls -la AnyKernel3/ || true
+
       - name: Upload Kernel Release Assets
         uses: actions/upload-artifact@v4
         with:
