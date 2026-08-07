@@ -307,15 +307,16 @@ jobs:
           include_bbg: ${{ inputs.include_bbg }}
           include_bbr: ${{ inputs.include_bbr }}
 
-      - name: Upload Kernel Artifacts
+      - name: Upload Kernel Release Assets
         uses: actions/upload-artifact@v4
         with:
           name: kernel-assets
           path: |
-            ${{ env.ZIP_PATH }}
-            ${{ env.SHA256_PATH }}
-            output_meta/*
-          retention-days: 7
+            *.zip
+            *.sha256
+            changelog.txt
+            commit_link.txt
+          if-no-files-found: error # Akibat baris ini, workflow akan error/merah jika ZIP tidak terdeteksi
 
       - name: Send Telegram Failure Notification & Cancel Jobs
         if: failure()
@@ -444,7 +445,7 @@ jobs:
         with:
           name: manager-apk-artifact
           path: output_apk/
-          retention-days: 1
+          retention-days: 7
 
 # =========================================================================
 # JOB 3: PUBLISH TO GITHUB RELEASES & TELEGRAM
@@ -471,11 +472,38 @@ jobs:
           path: release_assets
           merge-multiple: true
 
-      - name: Prepare Release Environment
+      - name: Prepare Release Environment & Clean APK
         run: |
           DATE_TAG=$(date +'%Y%m%d-%H%M')
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
 
+          echo "🔍 List file di release_assets:"
+          find release_assets -type f
+
+          # -----------------------------------------------------------------
+          # CLEANUP & RENAME APK
+          # -----------------------------------------------------------------
+          KSU_ENGINE="${{ inputs.ksu_fork }}"
+          [ -z "$KSU_ENGINE" ] && KSU_ENGINE="KernelSU"
+
+          TARGET_APK=$(find release_assets -type f -name "*arm64-v8a*.apk" | head -n 1)
+          if [ -z "$TARGET_APK" ]; then
+            TARGET_APK=$(find release_assets -type f -name "*.apk" | head -n 1)
+          fi
+
+          if [ -n "$TARGET_APK" ]; then
+            APK_DIR=$(dirname "$TARGET_APK")
+            NEW_APK_NAME="${KSU_ENGINE}_Manager.apk"
+            NEW_APK_PATH="${APK_DIR}/${NEW_APK_NAME}"
+
+            find release_assets -type f -name "*.apk" ! -path "$TARGET_APK" -delete
+            mv "$TARGET_APK" "$NEW_APK_PATH"
+            echo "✅ APK renamed to: $NEW_APK_NAME"
+          fi
+
+          # -----------------------------------------------------------------
+          # METADATA SETUP
+          # -----------------------------------------------------------------
           ZIP_FILE=$(find release_assets -type f -name "*.zip" | head -n 1)
           if [ -n "$ZIP_FILE" ]; then
             ZIP_NAME=$(basename "$ZIP_FILE")
@@ -565,13 +593,16 @@ jobs:
           ZSTD: "${{ inputs.include_zstd }}"
           BBR: "${{ inputs.include_bbr }}"
           TTL: "${{ inputs.include_ttl }}"
+          COMMIT_LINK: "${{ env.COMMIT_LINK }}"
+          GH_SERVER: "${{ github.server_url }}"
+          GH_REPO: "${{ github.repository }}"
+          GH_SHA: "${{ github.sha }}"
         run: |
           python3 << 'EOF'
-          import os, glob, subprocess
+          import os, subprocess, json, sys
 
           token = os.environ.get("TELEGRAM_TOKEN")
           chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-          manifest = os.environ.get("MANIFEST", "")
           ksu = os.environ.get("KSU", "")
 
           susfs = os.environ.get("SUSFS") == "true"
@@ -599,116 +630,98 @@ jobs:
           feature_str = "\n".join([f"• {f}" for f in feature_list])
 
           changelog_str = ""
-          cl_files = glob.glob("release_assets/**/changelog.txt", recursive=True)
-          if cl_files and os.path.exists(cl_files[0]):
-              with open(cl_files[0], "r") as f:
-                  changelog_str = f.read().strip()
-                  if len(changelog_str) > 300:
-                      changelog_str = changelog_str[:300] + "\n... (truncated)"
+          for root, _, files in os.walk("release_assets"):
+              for f in files:
+                  if f == "changelog.txt" and not changelog_str:
+                      with open(os.path.join(root, f), "r") as cl:
+                          changelog_str = cl.read().strip()
+                          if len(changelog_str) > 300:
+                              changelog_str = changelog_str[:300] + "\n... (truncated)"
 
-          commit_link = ""
-          link_files = glob.glob("release_assets/**/commit_link.txt", recursive=True)
-          if link_files and os.path.exists(link_files[0]):
-              with open(link_files[0], "r") as f:
-                  commit_link = f.read().strip()
+          commit_link = os.environ.get("COMMIT_LINK", "").strip()
+          if not commit_link:
+              server = os.environ.get("GH_SERVER", "https://github.com")
+              repo = os.environ.get("GH_REPO", "")
+              sha = os.environ.get("GH_SHA", "")
+              if repo and sha:
+                  commit_link = f"{server}/{repo}/commit/{sha}"
+
+          def send_doc(file_path, caption_text):
+              file_size = os.path.getsize(file_path)
+              if file_size > 52428800:
+                  print(f"❌ ERROR: File {file_path} melebihi 50MB ({file_size/1024/1024:.2f} MB). Telegram Bot API menolak file di atas 50MB!")
+                  sys.exit(1)
+
+              cmd = [
+                  "curl", "-s",
+                  "-F", f"chat_id={chat_id}",
+                  "-F", f"document=@{file_path}",
+                  "-F", f"caption={caption_text}",
+                  f"https://api.telegram.org/bot{token}/sendDocument"
+              ]
+              res = subprocess.run(cmd, capture_output=True, text=True)
+              try:
+                  resp = json.loads(res.stdout)
+                  if resp.get("ok"):
+                      print(f"✅ Telegram Sent: {os.path.basename(file_path)}")
+                  else:
+                      print(f"❌ Telegram API Error [{os.path.basename(file_path)}]: {resp}")
+                      sys.exit(1)
+              except Exception as e:
+                  print(f"❌ Response Error: {res.stdout}")
+                  sys.exit(1)
 
           if token and chat_id:
-              zips = glob.glob("release_assets/**/*.zip", recursive=True)
-              print(f"📦 Found ZIP files: {zips}")
+              zips, apks = [], []
+              for root, _, files in os.walk("release_assets"):
+                  for f in files:
+                      if f.endswith(".zip"):
+                          zips.append(os.path.join(root, f))
+                      elif f.endswith(".apk"):
+                          apks.append(os.path.join(root, f))
+
+              print(f"📦 FOUND ZIP FILES: {zips}")
+              print(f"📱 FOUND APK FILES: {apks}")
+
+              if not zips:
+                  print("⚠️ WARNING: Tidak ada file .zip yang ditemukan di folder release_assets!")
+
               for zip_file in zips:
                   name = os.path.basename(zip_file)
                   size = subprocess.check_output(["du", "-h", zip_file]).decode().split()[0]
                   
                   sha_hash = "N/A"
-                  sha_matches = glob.glob(f"release_assets/**/{name}.sha256", recursive=True)
-                  if sha_matches and os.path.exists(sha_matches[0]):
-                      with open(sha_matches[0], "r") as f:
-                          sha_hash = f.read().strip().split()[0]
+                  for root, _, files in os.walk("release_assets"):
+                      if f"{name}.sha256" in files:
+                          with open(os.path.join(root, f"{name}.sha256"), "r") as f:
+                              sha_hash = f.read().strip().split()[0]
+                          break
 
-                  link_md = f"\n🔗 [View Full Commit History]({commit_link})" if commit_link else ""
+                  link_str = f"\n🔗 Full Commit History: {commit_link}" if commit_link else ""
 
                   caption = (
-                      f"⚡ *Lotus-V1-{ksu} Kernel Ready!*\n\n"
-                      f"📱 *Device:* Redmi Note 10 5G / Poco M3 Pro 5G (camellia/camellian)\n"
-                      f"⚙️ *KSU Engine:* {ksu}\n\n"
-                      f"🛠️ *Active Features:*\n{feature_str}\n\n"
-                      f"📋 *Recent Commits:*\n{changelog_str}{link_md}\n\n"
-                      f"📦 *File:* `{name}`\n"
-                      f"📊 *Size:* {size}\n"
-                      f"🔑 *SHA256:* `{sha_hash}`"
+                      f"⚡ Lotus-V1-{ksu} Kernel Ready!\n\n"
+                      f"📱 Device: Redmi Note 10 5G / Poco M3 Pro 5G (camellia/camellian)\n"
+                      f"⚙️ KSU Engine: {ksu}\n\n"
+                      f"🛠️ Active Features:\n{feature_str}\n\n"
+                      f"📋 Recent Commits:\n{changelog_str}{link_str}\n\n"
+                      f"📦 File: {name}\n"
+                      f"📊 Size: {size}\n"
+                      f"🔑 SHA256: {sha_hash}"
                   )
-                  cmd = [
-                      "curl", "-s",
-                      "-F", f"chat_id={chat_id}",
-                      "-F", f"document=@{zip_file}",
-                      "-F", f"caption={caption}",
-                      "-F", "parse_mode=Markdown",
-                      f"https://api.telegram.org/bot{token}/sendDocument"
-                  ]
-                  res = subprocess.run(cmd, capture_output=True, text=True)
-                  print(f"✅ Telegram Kernel Sent: {name} | Response: {res.stdout}")
+                  send_doc(zip_file, caption)
 
-              apks = glob.glob("release_assets/**/*.apk", recursive=True)
-              print(f"📱 Found APK files: {apks}")
               for apk_file in apks:
                   name = os.path.basename(apk_file)
                   size = subprocess.check_output(["du", "-h", apk_file]).decode().split()[0]
                   caption = (
-                      f"📱 *KSU Manager App!*\n\n"
-                      f"⚙️ *KSU Engine:* {ksu}\n"
-                      f"📦 *File:* `{name}`\n"
-                      f"📊 *Size:* {size}"
+                      f"📱 KSU Manager App!\n\n"
+                      f"⚙️ KSU Engine: {ksu}\n"
+                      f"📦 File: {name}\n"
+                      f"📊 Size: {size}"
                   )
-                  cmd = [
-                      "curl", "-s",
-                      "-F", f"chat_id={chat_id}",
-                      "-F", f"document=@{apk_file}",
-                      "-F", f"caption={caption}",
-                      "-F", "parse_mode=Markdown",
-                      f"https://api.telegram.org/bot{token}/sendDocument"
-                  ]
-                  res = subprocess.run(cmd, capture_output=True, text=True)
-                  print(f"✅ Telegram Manager Sent: {name} | Response: {res.stdout}")
+                  send_doc(apk_file, caption)
           else:
               print("⚠️ Telegram Token or Chat ID is missing!")
           EOF
-
-      - name: Update Progress -> Complete
-        if: success()
-        env:
-          TELEGRAM_TOKEN: "${{ secrets.TELEGRAM_TOKEN }}"
-          TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
-          MANIFEST_NAME: "${{ inputs.manifest_name }}"
-          KSU_FORK: "${{ inputs.ksu_fork }}"
-        run: |
-          python3 << 'EOF'
-          import os, glob, urllib.request, urllib.parse
-
-          token = os.environ.get("TELEGRAM_TOKEN")
-          chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-          manifest = os.environ.get("MANIFEST_NAME", "")
-          ksu = os.environ.get("KSU_FORK", "")
-
-          manifest_xml = manifest if manifest.endswith(".xml") else f"{manifest}.xml"
-          msg_files = glob.glob("release_assets/**/telegram_msg.id", recursive=True)
-
-          if token and chat_id and msg_files:
-              msg_file = msg_files[0]
-              with open(msg_file, "r") as f:
-                  msg_id = f.read().strip()
-
-              text = (
-                  f"✅ *Lotus-Kernel Build Finished Successfully!*\n\n"
-                  f"📱 *Device:* Redmi Note 10 5G/POCO M3 Pro 5G\n"
-                  f"🌿 *Branch:* `{manifest_xml}`\n"
-                  f"⚙️ *KSU Engine:* {ksu}\n\n"
-                  f"🎉 *Progress:* `[4/4] Release assets uploaded & sent below!`"
-              )
-              data = urllib.parse.urlencode({"chat_id": chat_id, "message_id": msg_id, "text": text, "parse_mode": "Markdown"}).encode()
-              req = urllib.request.Request(f"https://api.telegram.org/bot{token}/editMessageText", data=data)
-              try:
-                  res = urllib.request.urlopen(req)
-                  print(f"✅ Telegram progress message #{msg_id} updated successfully!")
-              except Exception as e:
-                  print("Telegram finish notification error:", e)
-          EOF
+          
