@@ -445,7 +445,7 @@ jobs:
         with:
           name: manager-apk-artifact
           path: output_apk/
-          retention-days: 1
+          retention-days: 7
 
 # =========================================================================
 # JOB 3: PUBLISH TO GITHUB RELEASES & TELEGRAM
@@ -477,13 +477,15 @@ jobs:
           DATE_TAG=$(date +'%Y%m%d-%H%M')
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
 
+          echo "🔍 List file di release_assets:"
+          find release_assets -type f
+
           # -----------------------------------------------------------------
-          # 1. CLEANUP & RENAME APK (Hanya ambil ARM64 & perpendek nama)
+          # CLEANUP & RENAME APK
           # -----------------------------------------------------------------
           KSU_ENGINE="${{ inputs.ksu_fork }}"
           [ -z "$KSU_ENGINE" ] && KSU_ENGINE="KernelSU"
 
-          # Cari APK arm64-v8a terlebih dahulu
           TARGET_APK=$(find release_assets -type f -name "*arm64-v8a*.apk" | head -n 1)
           if [ -z "$TARGET_APK" ]; then
             TARGET_APK=$(find release_assets -type f -name "*.apk" | head -n 1)
@@ -494,16 +496,13 @@ jobs:
             NEW_APK_NAME="${KSU_ENGINE}_Manager.apk"
             NEW_APK_PATH="${APK_DIR}/${NEW_APK_NAME}"
 
-            # Hapus APK varian lain (x86, x86_64, armeabi-v7a) agar tidak terunggah ganda
             find release_assets -type f -name "*.apk" ! -path "$TARGET_APK" -delete
-
-            # Rename APK yang terpilih
             mv "$TARGET_APK" "$NEW_APK_PATH"
             echo "✅ APK renamed to: $NEW_APK_NAME"
           fi
 
           # -----------------------------------------------------------------
-          # 2. METADATA SETUP
+          # METADATA SETUP
           # -----------------------------------------------------------------
           ZIP_FILE=$(find release_assets -type f -name "*.zip" | head -n 1)
           if [ -n "$ZIP_FILE" ]; then
@@ -600,7 +599,7 @@ jobs:
           GH_SHA: "${{ github.sha }}"
         run: |
           python3 << 'EOF'
-          import os, subprocess, json
+          import os, subprocess, json, sys
 
           token = os.environ.get("TELEGRAM_TOKEN")
           chat_id = os.environ.get("TELEGRAM_CHAT_ID")
@@ -630,7 +629,6 @@ jobs:
           ]
           feature_str = "\n".join([f"• {f}" for f in feature_list])
 
-          # Read Changelog
           changelog_str = ""
           for root, _, files in os.walk("release_assets"):
               for f in files:
@@ -640,7 +638,6 @@ jobs:
                           if len(changelog_str) > 300:
                               changelog_str = changelog_str[:300] + "\n... (truncated)"
 
-          # Read Commit Link
           commit_link = os.environ.get("COMMIT_LINK", "").strip()
           if not commit_link:
               server = os.environ.get("GH_SERVER", "https://github.com")
@@ -650,11 +647,10 @@ jobs:
                   commit_link = f"{server}/{repo}/commit/{sha}"
 
           def send_doc(file_path, caption_text):
-              # Check 50MB Telegram limit
               file_size = os.path.getsize(file_path)
               if file_size > 52428800:
-                  print(f"⚠️ ERROR: File {file_path} > 50MB ({file_size/1024/1024:.2f} MB). Telegram limit reached!")
-                  return
+                  print(f"❌ ERROR: File {file_path} melebihi 50MB ({file_size/1024/1024:.2f} MB). Telegram Bot API menolak file di atas 50MB!")
+                  sys.exit(1)
 
               cmd = [
                   "curl", "-s",
@@ -669,9 +665,11 @@ jobs:
                   if resp.get("ok"):
                       print(f"✅ Telegram Sent: {os.path.basename(file_path)}")
                   else:
-                      print(f"❌ Telegram Rejected [{os.path.basename(file_path)}]: {resp.get('description')}")
+                      print(f"❌ Telegram API Error [{os.path.basename(file_path)}]: {resp}")
+                      sys.exit(1)
               except Exception as e:
                   print(f"❌ Response Error: {res.stdout}")
+                  sys.exit(1)
 
           if token and chat_id:
               zips, apks = [], []
@@ -682,7 +680,12 @@ jobs:
                       elif f.endswith(".apk"):
                           apks.append(os.path.join(root, f))
 
-              print(f"📦 Found ZIP files: {zips}")
+              print(f"📦 FOUND ZIP FILES: {zips}")
+              print(f"📱 FOUND APK FILES: {apks}")
+
+              if not zips:
+                  print("⚠️ WARNING: Tidak ada file .zip yang ditemukan di folder release_assets!")
+
               for zip_file in zips:
                   name = os.path.basename(zip_file)
                   size = subprocess.check_output(["du", "-h", zip_file]).decode().split()[0]
@@ -708,7 +711,6 @@ jobs:
                   )
                   send_doc(zip_file, caption)
 
-              print(f"📱 Found APK files: {apks}")
               for apk_file in apks:
                   name = os.path.basename(apk_file)
                   size = subprocess.check_output(["du", "-h", apk_file]).decode().split()[0]
@@ -722,3 +724,4 @@ jobs:
           else:
               print("⚠️ Telegram Token or Chat ID is missing!")
           EOF
+          
