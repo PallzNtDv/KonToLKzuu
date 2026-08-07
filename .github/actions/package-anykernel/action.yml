@@ -65,7 +65,7 @@ runs:
         [ "${{ inputs.include_bbr }}" = "true" ] && FEATURE_TAGS="${FEATURE_TAGS}-BBR"
 
         # -----------------------------------------------------------------
-        # GENERATE ANYKERNEL.SH (FIXED INDENTATION)
+        # GENERATE ANYKERNEL.SH
         # -----------------------------------------------------------------
         cat << 'EOF_AK3' > anykernel.sh
         # AnyKernel3 Ramdisk Mod Script for Xiaomi Camellia (MT6833)
@@ -144,14 +144,15 @@ runs:
         echo "✅ Created SHA256 checksum: ${ZIP_NAME}.sha256"
 
         # -----------------------------------------------------------------
-        # GENERATE CHANGELOG & COMMIT LINK
+        # GENERATE CHANGELOG & COMMIT LINK (PERBAIKAN DENGAN FALLBACK)
         # -----------------------------------------------------------------
         if [ -d "kernel-source" ]; then
           cd kernel-source
-          git log -n 10 --pretty=format:"• %h - %s (%cr) <%an>" > ../changelog.txt
+          git log -n 10 --pretty=format:"• %h - %s (%cr) <%an>" > ../changelog.txt 2>/dev/null || echo "• Lotus Kernel Build Release" > ../changelog.txt
           
-          REMOTE_URL=$(git config --get remote.origin.url | sed 's/\.git$//')
-          HEAD_SHA=$(git rev-parse HEAD)
+          REMOTE_URL=$(git config --get remote.origin.url 2>/dev/null | sed 's/\.git$//' || true)
+          HEAD_SHA=$(git rev-parse HEAD 2>/dev/null || true)
+
           if [ -n "$REMOTE_URL" ] && [ -n "$HEAD_SHA" ]; then
             echo "${REMOTE_URL}/commit/${HEAD_SHA}" > ../commit_link.txt
           else
