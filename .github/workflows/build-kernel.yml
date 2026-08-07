@@ -53,8 +53,9 @@ permissions:
   contents: write
 
 jobs:
+
 # =========================================================================
-# JOB 1: BUILD KERNEL
+# JOB 1: BUILD & COMPILING KERNEL
 # =========================================================================
   build-kernel:
     if: inputs.build_target == 'both' || inputs.build_target == 'kernel_only'
@@ -77,11 +78,11 @@ jobs:
           remove-haskell: "true"
           remove-codeql: "true"
           remove-docker-images: "true"
-          
+
       - name: Checkout Repository
         uses: actions/checkout@v4
-        
-      - name: Send Telegram Start Notification & Save Message ID
+
+      - name: Send Telegram Start Notification
         env:
           TELEGRAM_TOKEN: "${{ secrets.TELEGRAM_TOKEN }}"
           TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
@@ -90,108 +91,33 @@ jobs:
           KSU: "${{ inputs.ksu_fork }}"
           TOOLCHAIN: "${{ inputs.toolchain }}"
           RUN_NUM: "${{ github.run_number }}"
-        run: |
-          mkdir -p output_meta
-          python3 << 'EOF'
-          import os, json, urllib.request, urllib.parse
-
-          token = os.environ.get("TELEGRAM_TOKEN")
-          chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-          manifest = os.environ.get("MANIFEST", "")
-          target = os.environ.get("TARGET", "")
-          ksu = os.environ.get("KSU", "")
-          toolchain = os.environ.get("TOOLCHAIN", "")
-          run_num = os.environ.get("RUN_NUM", "")
-
-          manifest_xml = manifest if manifest.endswith(".xml") else f"{manifest}.xml"
-
-          if token and chat_id:
-              text = (
-                  f"⚡ *Lotus-Kernel Build Engine Initialized*\n\n"
-                  f"📱 *Device:* Redmi Note 10 5G/POCO M3 Pro 5G\n"
-                  f"🌿 *Branch:* `{manifest_xml}`\n"
-                  f"🎯 *Target:* {target}\n"
-                  f"🔑 *KSU Engine:* {ksu}\n"
-                  f"🛠️ *Toolchain:* {toolchain}\n"
-                  f"🔢 *Build Run:* #{run_num}\n\n"
-                  f"🔄 *Progress:* `[1/4] Preparing build dependencies...`"
-              )
-              data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode()
-              req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
-              try:
-                  response = urllib.request.urlopen(req)
-                  res_data = json.loads(response.read().decode())
-                  msg_id = res_data.get("result", {}).get("message_id")
-                  if msg_id:
-                      with open("output_meta/telegram_msg.id", "w") as f:
-                          f.write(str(msg_id))
-                      print(f"✅ Telegram Message ID saved: {msg_id}")
-              except Exception as e:
-                  print("Telegram notification error:", e)
-          EOF
+        run: python3 .github/scripts/telegram_notify.py start
 
       - name: Setup Build Dependencies
         run: |
           sudo apt purge -y man-db /var/lib/man-db/auto-update || true
           sudo apt update -qq
           sudo apt install -y build-essential bc libncurses5-dev libssl-dev bison flex libelf-dev zip unzip git ccache curl aria2 jq
-          
+
       - name: Download Toolchains
         uses: ./.github/actions/download-toolchain
         with:
           toolchain: ${{ inputs.toolchain }}
-          
+
       - name: Sync Kernel Source from Manifest
-        run: |
-          mkdir -p ~/.bin
-          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo
-          chmod a+rx ~/.bin/repo
-          export PATH=~/.bin:$PATH
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash .github/scripts/sync_source.sh "${{ inputs.manifest_name }}"
 
-          RAW_INPUT="${{ inputs.manifest_name }}"
-          CLEAN_NAME="${RAW_INPUT%.xml}"
-          TARGET_NAME="${CLEAN_NAME}.xml"
-
-          echo "🔍 Searching for manifest file: $TARGET_NAME"
-
-          FOUND_FILE=$(find "$GITHUB_WORKSPACE" -type f -iname "$TARGET_NAME" -not -path "*/.git/*" -not -path "*/toolchain/*" | head -n 1)
-
-          if [ -z "$FOUND_FILE" ] || [ ! -f "$FOUND_FILE" ]; then
-            echo "::error::File $TARGET_NAME NOT FOUND on GitHub Runner!"
-            echo "=================================================="
-            echo "📂 List of all files currently in your repository:"
-            find "$GITHUB_WORKSPACE" -maxdepth 4 -not -path "*/.git/*" -not -path "*/toolchain/*"
-            echo "=================================================="
-            exit 1
-          fi
-
-          MANIFEST_PATH="$FOUND_FILE"
-          echo "✅ Manifest file found at: $MANIFEST_PATH"
-
-          mkdir -p local-manifest
-          cp "$MANIFEST_PATH" local-manifest/default.xml
-          cd local-manifest
-          git init
-          git config user.name "GitHub Action"
-          git config user.email "action@github.com"
-          git add default.xml
-          git commit -m "Local manifest init"
-          git branch -M main
-          cd ..
-
-          repo init -u ./local-manifest -b main
-          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
-          repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle  
-          
       - name: Setup KSU Fork
         uses: ./.github/actions/setup-ksu
         with:
           ksu_fork: ${{ inputs.ksu_fork }}
-                  
+
       - name: Apply SUSFS Patch & Configs
         if: inputs.include_susfs == true
         uses: ./.github/actions/apply-susfs
-          
+
       - name: Inject Selected Kernel Features
         uses: ./.github/actions/inject-features
         with:
@@ -206,37 +132,6 @@ jobs:
           enable_droidspace: ${{ inputs.include_droidspace }}
           enable_susfs: ${{ inputs.include_susfs }}
 
-      - name: Configure Kernel Defconfig & Kprobes
-        run: |
-          cd kernel-source
-          
-          set_config() {
-            local config=$1
-            local value=$2
-            local file=$3
-            if grep -q "^# $config is not set" "$file"; then
-              sed -i "s/^# $config is not set/$config=$value/" "$file"
-            elif grep -q "^$config=" "$file"; then
-              sed -i "s/^$config=.*/$config=$value/" "$file"
-            else
-              echo "$config=$value" >> "$file"
-            fi
-          }
-
-          DEFCONFIG_FILE="arch/arm64/configs/${{ env.KERNEL_DEFCONFIG }}"
-
-          set_config "CONFIG_KPROBES" "y" "$DEFCONFIG_FILE"
-          set_config "CONFIG_HAVE_KPROBES" "y" "$DEFCONFIG_FILE"
-          set_config "CONFIG_KPROBE_EVENTS" "y" "$DEFCONFIG_FILE"
-          set_config "CONFIG_KSU" "y" "$DEFCONFIG_FILE"
-
-      - name: Configure ccache
-        run: |
-          export CCACHE_DIR=~/.cache/ccache
-          ccache -M 5G
-          ccache -o compression=true
-          ccache -z
-
       - name: Update Progress -> Compiling Kernel
         if: always()
         env:
@@ -244,60 +139,10 @@ jobs:
           TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
           MANIFEST_NAME: "${{ inputs.manifest_name }}"
           KSU_FORK: "${{ inputs.ksu_fork }}"
-        run: |
-          python3 << 'EOF'
-          import os, urllib.request, urllib.parse
-
-          token = os.environ.get("TELEGRAM_TOKEN")
-          chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-          manifest = os.environ.get("MANIFEST_NAME", "")
-          ksu = os.environ.get("KSU_FORK", "")
-          msg_file = "output_meta/telegram_msg.id"
-
-          manifest_xml = manifest if manifest.endswith(".xml") else f"{manifest}.xml"
-
-          if token and chat_id and os.path.exists(msg_file):
-              with open(msg_file, "r") as f:
-                  msg_id = f.read().strip()
-
-              text = (
-                  f"⚡ *Lotus-Kernel Build Engine*\n\n"
-                  f"📱 *Device:* Redmi Note 10 5G/POCO M3 Pro 5G\n"
-                  f"🌿 *Branch:* `{manifest_xml}`\n"
-                  f"🔑 *KSU Engine:* {ksu}\n\n"
-                  f"⚙️ *Progress:* `[2/4] Compiling Kernel source with Clang...` ⏳"
-              )
-              data = urllib.parse.urlencode({"chat_id": chat_id, "message_id": msg_id, "text": text, "parse_mode": "Markdown"}).encode()
-              req = urllib.request.Request(f"https://api.telegram.org/bot{token}/editMessageText", data=data)
-              try:
-                  urllib.request.urlopen(req)
-              except Exception as e:
-                  print("Telegram edit message error:", e)
-          EOF
+        run: python3 .github/scripts/telegram_notify.py progress
 
       - name: Build Kernel Image
-        run: |
-          cd kernel-source
-
-          rm -f $GITHUB_WORKSPACE/toolchain/clang/bin/ld
-          
-          export PATH=$GITHUB_WORKSPACE/toolchain/clang/bin:$GITHUB_WORKSPACE/toolchain/gcc64/bin:$GITHUB_WORKSPACE/toolchain/gcc32/bin:$PATH
-          export CCACHE_DIR=~/.cache/ccache
-          
-          make O=out ARCH=${{ env.ARCH }} $KERNEL_DEFCONFIG
-          
-          make -j$(nproc --all) O=out \
-            ARCH=${{ env.ARCH }} \
-            CC="ccache clang" \
-            CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-android- \
-            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
-            LD=ld.lld
-
-          echo "=================================================="
-          echo "📊 CCACHE STATS"
-          echo "=================================================="
-          ccache -s
+        run: bash .github/scripts/build_kernel.sh "${{ env.KERNEL_DEFCONFIG }}" "${{ env.ARCH }}"
 
       - name: Package AnyKernel3 & Generate SHA256
         uses: ./.github/actions/package-anykernel
@@ -306,14 +151,6 @@ jobs:
           include_susfs: ${{ inputs.include_susfs }}
           include_bbg: ${{ inputs.include_bbg }}
           include_bbr: ${{ inputs.include_bbr }}
-
-      # Step debug untuk melihat file apa saja yang ada di root workspace
-      - name: Debug Workspace Files
-        run: |
-          echo "📂 File di Root Workspace:"
-          ls -la
-          echo "📂 File di AnyKernel3:"
-          ls -la AnyKernel3/ || true
 
       - name: Upload Kernel Release Assets
         uses: actions/upload-artifact@v4
@@ -335,29 +172,13 @@ jobs:
           KSU: "${{ inputs.ksu_fork }}"
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
         run: |
-          python3 << 'EOF'
-          import os, urllib.request, urllib.parse
-          token = os.environ.get("TELEGRAM_TOKEN")
-          chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-          manifest = os.environ.get("MANIFEST", "")
-          ksu = os.environ.get("KSU", "")
-
-          if token and chat_id:
-              text = f"❌ *Build Kernel Failed!*\n📱 *Device:* {manifest}\n⚙️ *Fork:* {ksu}"
-              data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode()
-              req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
-              try:
-                  urllib.request.urlopen(req)
-              except Exception as e:
-                  print("Telegram notification error:", e)
-          EOF
-
-          echo "❌ Cancelling parallel jobs due to Kernel failure..."
+          python3 .github/scripts/telegram_notify.py failure
           gh run cancel ${{ github.run_id }}
-
+          
   # =========================================================================
   # JOB 2: BUILD MANAGER APP
   # =========================================================================
+  
   build-manager:
     needs: build-kernel
     if: |
