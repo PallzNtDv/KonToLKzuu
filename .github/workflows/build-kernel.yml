@@ -595,7 +595,7 @@ jobs:
           TTL: "${{ inputs.include_ttl }}"
         run: |
           python3 << 'EOF'
-          import os, glob, subprocess
+          import os, subprocess
 
           token = os.environ.get("TELEGRAM_TOKEN")
           chat_id = os.environ.get("TELEGRAM_CHAT_ID")
@@ -626,32 +626,48 @@ jobs:
           ]
           feature_str = "\n".join([f"• {f}" for f in feature_list])
 
+          # Cari file changelog.txt & commit_link.txt dengan os.walk
           changelog_str = ""
-          cl_files = glob.glob("release_assets/**/changelog.txt", recursive=True)
-          if cl_files and os.path.exists(cl_files[0]):
-              with open(cl_files[0], "r") as f:
-                  changelog_str = f.read().strip()
-                  if len(changelog_str) > 300:
-                      changelog_str = changelog_str[:300] + "\n... (truncated)"
-
           commit_link = ""
-          link_files = glob.glob("release_assets/**/commit_link.txt", recursive=True)
-          if link_files and os.path.exists(link_files[0]):
-              with open(link_files[0], "r") as f:
-                  commit_link = f.read().strip()
+          for root, _, files in os.walk("release_assets"):
+              for f in files:
+                  if f == "changelog.txt" and not changelog_str:
+                      with open(os.path.join(root, f), "r") as cl:
+                          changelog_str = cl.read().strip()
+                          if len(changelog_str) > 300:
+                              changelog_str = changelog_str[:300] + "\n... (truncated)"
+                  elif f == "commit_link.txt" and not commit_link:
+                      with open(os.path.join(root, f), "r") as cl:
+                          commit_link = cl.read().strip()
 
           if token and chat_id:
-              zips = glob.glob("release_assets/**/*.zip", recursive=True)
+              # Gunakan os.walk agar 100% menemukan ZIP di root maupun subfolder
+              zips = []
+              apks = []
+              for root, _, files in os.walk("release_assets"):
+                  for f in files:
+                      if f.endswith(".zip"):
+                          zips.append(os.path.join(root, f))
+                      elif f.endswith(".apk"):
+                          apks.append(os.path.join(root, f))
+
               print(f"📦 Found ZIP files: {zips}")
               for zip_file in zips:
                   name = os.path.basename(zip_file)
                   size = subprocess.check_output(["du", "-h", zip_file]).decode().split()[0]
                   
                   sha_hash = "N/A"
-                  sha_matches = glob.glob(f"release_assets/**/{name}.sha256", recursive=True)
-                  if sha_matches and os.path.exists(sha_matches[0]):
-                      with open(sha_matches[0], "r") as f:
+                  sha_file_path = f"{zip_file}.sha256"
+                  if os.path.exists(sha_file_path):
+                      with open(sha_file_path, "r") as f:
                           sha_hash = f.read().strip().split()[0]
+                  else:
+                      # Fallback cari sha256 dimanapun berada
+                      for root, _, files in os.walk("release_assets"):
+                          if f"{name}.sha256" in files:
+                              with open(os.path.join(root, f"{name}.sha256"), "r") as f:
+                                  sha_hash = f.read().strip().split()[0]
+                              break
 
                   link_md = f"\n🔗 [View Full Commit History]({commit_link})" if commit_link else ""
 
@@ -676,7 +692,6 @@ jobs:
                   res = subprocess.run(cmd, capture_output=True, text=True)
                   print(f"✅ Telegram Kernel Sent: {name} | Response: {res.stdout}")
 
-              apks = glob.glob("release_assets/**/*.apk", recursive=True)
               print(f"📱 Found APK files: {apks}")
               for apk_file in apks:
                   name = os.path.basename(apk_file)
@@ -700,44 +715,3 @@ jobs:
           else:
               print("⚠️ Telegram Token or Chat ID is missing!")
           EOF
-
-      - name: Update Progress -> Complete
-        if: success()
-        env:
-          TELEGRAM_TOKEN: "${{ secrets.TELEGRAM_TOKEN }}"
-          TELEGRAM_CHAT_ID: "${{ secrets.TELEGRAM_CHAT_ID }}"
-          MANIFEST_NAME: "${{ inputs.manifest_name }}"
-          KSU_FORK: "${{ inputs.ksu_fork }}"
-        run: |
-          python3 << 'EOF'
-          import os, glob, urllib.request, urllib.parse
-
-          token = os.environ.get("TELEGRAM_TOKEN")
-          chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-          manifest = os.environ.get("MANIFEST_NAME", "")
-          ksu = os.environ.get("KSU_FORK", "")
-
-          manifest_xml = manifest if manifest.endswith(".xml") else f"{manifest}.xml"
-          msg_files = glob.glob("release_assets/**/telegram_msg.id", recursive=True)
-
-          if token and chat_id and msg_files:
-              msg_file = msg_files[0]
-              with open(msg_file, "r") as f:
-                  msg_id = f.read().strip()
-
-              text = (
-                  f"✅ *Lotus-Kernel Build Finished Successfully!*\n\n"
-                  f"📱 *Device:* Redmi Note 10 5G/POCO M3 Pro 5G\n"
-                  f"🌿 *Branch:* `{manifest_xml}`\n"
-                  f"⚙️ *KSU Engine:* {ksu}\n\n"
-                  f"🎉 *Progress:* `[4/4] Release assets uploaded & sent below!`"
-              )
-              data = urllib.parse.urlencode({"chat_id": chat_id, "message_id": msg_id, "text": text, "parse_mode": "Markdown"}).encode()
-              req = urllib.request.Request(f"https://api.telegram.org/bot{token}/editMessageText", data=data)
-              try:
-                  res = urllib.request.urlopen(req)
-                  print(f"✅ Telegram progress message #{msg_id} updated successfully!")
-              except Exception as e:
-                  print("Telegram finish notification error:", e)
-          EOF
-
