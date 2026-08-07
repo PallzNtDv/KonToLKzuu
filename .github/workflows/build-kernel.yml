@@ -307,15 +307,16 @@ jobs:
           include_bbg: ${{ inputs.include_bbg }}
           include_bbr: ${{ inputs.include_bbr }}
 
-      - name: Upload Kernel Artifacts
+      - name: Upload Kernel Release Assets
         uses: actions/upload-artifact@v4
         with:
           name: kernel-assets
           path: |
-            ${{ env.ZIP_PATH }}
-            ${{ env.SHA256_PATH }}
-            output_meta/*
-          retention-days: 7
+            *.zip
+            *.sha256
+            changelog.txt
+            commit_link.txt
+          if-no-files-found: error # Akibat baris ini, workflow akan error/merah jika ZIP tidak terdeteksi
 
       - name: Send Telegram Failure Notification & Cancel Jobs
         if: failure()
