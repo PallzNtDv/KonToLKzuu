@@ -30,8 +30,8 @@ runs:
             BRANCH="main"
             ;;
           "KSU-Next")
-            REPO="https://github.com/rifs28/KernelSU-Next.git"
-            BRANCH="next"
+            REPO="https://github.com/KernelSU-Next/KernelSU-Next.git"
+            BRANCH="dev"
             ;;
           *)
             REPO="https://github.com/tiann/KernelSU.git"
