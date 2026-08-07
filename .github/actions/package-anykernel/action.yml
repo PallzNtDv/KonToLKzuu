@@ -32,7 +32,7 @@ runs:
         cd AnyKernel3
 
         # -----------------------------------------------------------------
-        # PENANGANAN KERNEL IMAGE (Prioritas: Image.gz-dtb)
+        # PENANGANAN KERNEL IMAGE
         # -----------------------------------------------------------------
         OUT_DIR="../kernel-source/out/arch/arm64/boot"
 
@@ -46,21 +46,12 @@ runs:
           echo "✅ Found Image! Copying to AnyKernel3..."
           cp "${OUT_DIR}/Image" .
         else
-          echo "❌ Error: No valid kernel image (Image.gz-dtb / Image.gz / Image) found in ${OUT_DIR}!"
+          echo "❌ Error: No valid kernel image found in ${OUT_DIR}!"
           exit 1
         fi
 
-        # Copy DTB terpisah jika ada (opsional untuk beberapa device/vendor)
-        if [ -f "${OUT_DIR}/dtb" ]; then
-          echo "ℹ️ Found separate dtb file, copying..."
-          cp "${OUT_DIR}/dtb" .
-        fi
-
-        # Copy DTBO terpisah jika ada
-        if [ -f "${OUT_DIR}/dtbo.img" ]; then
-          echo "ℹ️ Found dtbo.img file, copying..."
-          cp "${OUT_DIR}/dtbo.img" .
-        fi
+        [ -f "${OUT_DIR}/dtb" ] && cp "${OUT_DIR}/dtb" .
+        [ -f "${OUT_DIR}/dtbo.img" ] && cp "${OUT_DIR}/dtbo.img" .
 
         # -----------------------------------------------------------------
         # TAGGING & NAMING SETUP
@@ -76,7 +67,7 @@ runs:
         # -----------------------------------------------------------------
         # GENERATE ANYKERNEL.SH
         # -----------------------------------------------------------------
-        cat << '        EOF_AK3' | sed 's/^        //' > anykernel.sh
+        cat << 'EOF_AK3' > anykernel.sh
         # AnyKernel3 Ramdisk Mod Script for Xiaomi Camellia (MT6833)
         # osm0sis @ xda-developers
 
@@ -106,10 +97,10 @@ runs:
         ramdisk_compression=auto;
         patch_vbmeta_flag=auto;
 
-        # Import fungsi utama AnyKernel (WAJIB PERTAMA)
+        # Import fungsi utama AnyKernel
         . tools/ak3-core.sh;
 
-        # Fix O3BFD File Descriptor agar ui_print muncul di TWRP / OrangeFox modern
+        # Fix O3BFD File Descriptor
         if [ -z "$O3BFD" ] || [ ! -e "/proc/self/fd/$O3BFD" ]; then
           for fd in 1 2 3 0; do
             if [ -e "/proc/self/fd/$fd" ]; then
@@ -133,10 +124,8 @@ runs:
         ui_print " [>] Kernel   : Linux 4.14.x";
         ui_print "==================================================";
 
-        # Jeda 2 detik agar banner sempat terbaca di recovery
         sleep 2;
 
-        # Eksekusi Patching & Flashing Boot
         split_boot;
         flash_boot;
         flash_dtbo;
@@ -153,3 +142,25 @@ runs:
         cd ..
         sha256sum "${ZIP_NAME}" > "${ZIP_NAME}.sha256"
         echo "✅ Created SHA256 checksum: ${ZIP_NAME}.sha256"
+
+        # -----------------------------------------------------------------
+        # GENERATE CHANGELOG & COMMIT LINK (PERBAIKAN DENGAN FALLBACK)
+        # -----------------------------------------------------------------
+        if [ -d "kernel-source" ]; then
+          cd kernel-source
+          git log -n 10 --pretty=format:"• %h - %s (%cr) <%an>" > ../changelog.txt 2>/dev/null || echo "• Lotus Kernel Build Release" > ../changelog.txt
+          
+          REMOTE_URL=$(git config --get remote.origin.url 2>/dev/null | sed 's/\.git$//' || true)
+          HEAD_SHA=$(git rev-parse HEAD 2>/dev/null || true)
+
+          if [ -n "$REMOTE_URL" ] && [ -n "$HEAD_SHA" ]; then
+            echo "${REMOTE_URL}/commit/${HEAD_SHA}" > ../commit_link.txt
+          else
+            echo "https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}" > ../commit_link.txt
+          fi
+          cd ..
+        else
+          echo "• Lotus Kernel Build Release" > changelog.txt
+          echo "https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}" > commit_link.txt
+        fi
+        echo "✅ Generated changelog.txt & commit_link.txt!"
