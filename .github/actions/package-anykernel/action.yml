@@ -50,7 +50,7 @@ runs:
           exit 1
         fi
 
-        # Copy DTB terpisah jika ada (opsional untuk beberapa device/vendor)
+        # Copy DTB terpisah jika ada
         if [ -f "${OUT_DIR}/dtb" ]; then
           echo "ℹ️ Found separate dtb file, copying..."
           cp "${OUT_DIR}/dtb" .
@@ -153,3 +153,25 @@ runs:
         cd ..
         sha256sum "${ZIP_NAME}" > "${ZIP_NAME}.sha256"
         echo "✅ Created SHA256 checksum: ${ZIP_NAME}.sha256"
+
+        # -----------------------------------------------------------------
+        # GENERATE CHANGELOG & COMMIT LINK (Memastikan File Selalu Ada)
+        # -----------------------------------------------------------------
+        if [ -d "kernel-source" ]; then
+          cd kernel-source
+          git log -n 10 --pretty=format:"• %h - %s (%cr) <%an>" > ../changelog.txt
+          
+          REMOTE_URL=$(git config --get remote.origin.url | sed 's/\.git$//')
+          HEAD_SHA=$(git rev-parse HEAD)
+          if [ -n "$REMOTE_URL" ] && [ -n "$HEAD_SHA" ]; then
+            echo "${REMOTE_URL}/commit/${HEAD_SHA}" > ../commit_link.txt
+          else
+            echo "https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}" > ../commit_link.txt
+          fi
+          cd ..
+        else
+          echo "• Lotus Kernel Build Release" > changelog.txt
+          echo "https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}" > commit_link.txt
+        fi
+        echo "✅ Generated changelog.txt & commit_link.txt!"
+        
