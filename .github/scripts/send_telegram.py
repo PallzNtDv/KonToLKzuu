@@ -7,7 +7,7 @@ def main():
     token = os.environ.get("TELEGRAM_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
     ksu = os.environ.get("KSU", "KernelSU")
-
+    
     if not token or not chat_id:
         print("⚠️ TELEGRAM_TOKEN atau TELEGRAM_CHAT_ID tidak ditemukan. Skip Telegram notification.")
         return
@@ -34,8 +34,8 @@ def main():
             if f == "changelog.txt" and not changelog_str:
                 with open(os.path.join(root, f), "r") as cl:
                     changelog_str = cl.read().strip()
-                    if len(changelog_str) > 300:
-                        changelog_str = changelog_str[:300] + "\n... (truncated)"
+                if len(changelog_str) > 300:
+                    changelog_str = changelog_str[:300] + "\n... (truncated)"
 
     # 3. Baca Commit Link
     commit_link = os.environ.get("COMMIT_LINK", "").strip()
@@ -45,7 +45,7 @@ def main():
         sha = os.environ.get("GH_SHA", "")
         if repo and sha:
             commit_link = f"{server}/{repo}/commit/{sha}"
-
+    
     link_str = f"\n🔗 Full Commit History: {commit_link}" if commit_link else ""
 
     # 4. Fungsi Kirim Dokumen via Curl
@@ -54,7 +54,7 @@ def main():
         if file_size > 52428800:
             print(f"❌ ERROR: File {file_path} > 50MB ({file_size/1024/1024:.2f} MB). Diatas batas Telegram API!")
             sys.exit(1)
-
+            
         cmd = [
             "curl", "-s",
             "-F", f"chat_id={chat_id}",
@@ -74,14 +74,20 @@ def main():
             print(f"❌ Response Error: {res.stdout}")
             sys.exit(1)
 
-    # 5. Cari & Kirim File (.zip dan .apk)
+    # 5. Cari & Kirim File (.zip dan .apk) DENGAN FILTER ARM64/UNIVERSAL
     zips, apks = [], []
     for root, _, files in os.walk("release_assets"):
         for f in files:
             if f.endswith(".zip"):
                 zips.append(os.path.join(root, f))
             elif f.endswith(".apk"):
-                apks.append(os.path.join(root, f))
+                fname_lower = f.lower()
+                # ABAIKAN arsitektur 32-bit dan x86
+                if any(arch in fname_lower for arch in ["v7a", "x86", "armeabi"]):
+                    continue
+                # HANYA AMBIL jika terdapat label arm64 atau universal
+                if any(arch in fname_lower for arch in ["arm64", "universal"]):
+                    apks.append(os.path.join(root, f))
 
     print(f"📦 Found ZIPs: {zips}")
     print(f"📱 Found APKs: {apks}")
@@ -89,13 +95,14 @@ def main():
     for zip_file in zips:
         name = os.path.basename(zip_file)
         size = subprocess.check_output(["du", "-h", zip_file]).decode().split()[0]
+        
         sha_hash = "N/A"
         for root, _, files in os.walk("release_assets"):
             if f"{name}.sha256" in files:
                 with open(os.path.join(root, f"{name}.sha256"), "r") as f:
                     sha_hash = f.read().strip().split()[0]
                 break
-
+                
         caption = (
             f"⚡ Lotus-V1-{ksu} Kernel Ready!\n\n"
             f"📱 Device: Redmi Note 10 5G / Poco M3 Pro 5G (camellia/camellian)\n"
@@ -104,21 +111,21 @@ def main():
             f"📋 Recent Commits:\n{changelog_str}{link_str}\n\n"
             f"📦 File: {name}\n"
             f"📊 Size: {size}\n"
-            f"🔑 SHA256: {sha_hash}"
+            f"🔑 SHA256: <code>{sha_hash}</code>"
         )
         send_doc(zip_file, caption)
 
     for apk_file in apks:
         name = os.path.basename(apk_file)
         size = subprocess.check_output(["du", "-h", apk_file]).decode().split()[0]
+        
         caption = (
             f"📱 KSU Manager App!\n\n"
             f"⚙️ KSU Engine: {ksu}\n"
-            f"📦 File: {name}\n"
+            f"📦 File: <code>{name}</code>\n"
             f"📊 Size: {size}"
         )
         send_doc(apk_file, caption)
 
 if __name__ == "__main__":
     main()
-          
