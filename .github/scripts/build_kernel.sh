@@ -31,6 +31,11 @@ rm -f "$GITHUB_WORKSPACE/toolchain/clang/bin/ld"
 export PATH="$GITHUB_WORKSPACE/toolchain/clang/bin:$GITHUB_WORKSPACE/toolchain/gcc64/bin:$GITHUB_WORKSPACE/toolchain/gcc32/bin:$PATH"
 export CCACHE_DIR=~/.cache/ccache
 
+# ------------------------------------------ 
+export KBUILD_BUILD_USER="root"
+export KBUILD_BUILD_HOST="rwxrxrx"
+#  ------------------------------------------ 
+
 ccache -M 5G
 ccache -o compression=true
 ccache -z
