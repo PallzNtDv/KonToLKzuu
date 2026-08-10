@@ -50,13 +50,43 @@ chmod +x gradlew
 echo "🏗️ Starting Gradle Build for Manager APK..."
 ./gradlew assembleRelease --no-daemon
 
-# 3. Pindahkan hasil APK
-mkdir -p "$GITHUB_WORKSPACE/output_apk"
-find app/build/outputs/apk/release/ . -type f -name "*.apk" -exec cp {} "$GITHUB_WORKSPACE/output_apk/" \; 2>/dev/null || true
+# 3. Cari KHUSUS APK arm64-v8a atau Universal
+APK_DIR="app/build/outputs/apk/release"
+FOUND_APK=""
 
-if [ -z "$(ls -A "$GITHUB_WORKSPACE/output_apk"/*.apk 2>/dev/null)" ]; then
-  echo "❌ Error: APK file not found after Gradle build!"
+if ls ${APK_DIR}/*arm64-v8a*.apk 1>/dev/null 2>&1; then
+  FOUND_APK=$(ls ${APK_DIR}/*arm64-v8a*.apk | head -n 1)
+elif ls ${APK_DIR}/*universal*.apk 1>/dev/null 2>&1; then
+  FOUND_APK=$(ls ${APK_DIR}/*universal*.apk | head -n 1)
+else
+  FOUND_APK=$(find ${APK_DIR} -type f -name "*.apk" ! -name "*armeabi*" ! -name "*x86*" | head -n 1)
+fi
+
+if [ -z "$FOUND_APK" ] || [ ! -f "$FOUND_APK" ]; then
+  echo "❌ Error: No valid ARM64 or Universal APK found!"
   exit 1
 fi
 
-echo "✅ Manager APK built successfully!"
+echo "📦 Target Unsigned APK found: ${FOUND_APK}"
+
+# 4. Buat Keystore Sementara & Sign APK
+echo "🔑 Generating release key and signing APK..."
+keytool -genkeypair -v -keystore release.keystore -alias releasekey -keyalg RSA -keysize 2048 -validity 10000 \
+  -storepass android -keypass android -dname "CN=Android,OU=Android,O=Android,L=Android,ST=Android,C=US" 2>/dev/null || true
+
+# Cari apksigner dari Android SDK bawaan GitHub Runner
+APKSIGNER=$(find $ANDROID_HOME/build-tools/ -name "apksigner" 2>/dev/null | sort -V | tail -n 1)
+
+mkdir -p "$GITHUB_WORKSPACE/output_apk"
+FINAL_APK_PATH="$GITHUB_WORKSPACE/output_apk/${FORK}_Manager_arm64-signed.apk"
+
+if [ -n "$APKSIGNER" ] && [ -x "$APKSIGNER" ]; then
+  echo "⚙️ Signing using apksigner ($APKSIGNER)..."
+  "$APKSIGNER" sign --ks release.keystore --ks-pass pass:android --key-pass pass:android --out "$FINAL_APK_PATH" "$FOUND_APK"
+else
+  echo "⚠️ apksigner not found, signing using jarsigner..."
+  cp "$FOUND_APK" "$FINAL_APK_PATH"
+  jarsigner -keystore release.keystore -storepass android -keypass android "$FINAL_APK_PATH" releasekey
+fi
+
+echo "✅ Signed ARM64 Manager APK created successfully: ${FINAL_APK_PATH}"
