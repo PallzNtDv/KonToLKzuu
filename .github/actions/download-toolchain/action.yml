@@ -1,4 +1,4 @@
-name: "Download Toolchains"
+Name: "Download Toolchains"
 description: "Download selected Clang and GCC toolchains for kernel building"
 inputs:
   toolchain:
@@ -21,7 +21,8 @@ runs:
             ;;
           "zyc-clang")
             echo "Downloading ZyC Clang..."
-            URL=$(curl -sSL -H "User-Agent: Mozilla/5.0" "https://gitlab.com/api/v4/projects/28003182/releases" | jq -r '.[0].assets.links[]?.url // .[0].description // empty' 2>/dev/null | grep -oE 'https://[^\s"\)]+\.tar\.(gz|xz)' | head -n 1)
+            # 👇 PERBAIKAN: Ditambahkan '|| true' di akhir baris ini agar tidak crash saat grep gagal
+            URL=$(curl -sSL -H "User-Agent: Mozilla/5.0" "https://gitlab.com/api/v4/projects/28003182/releases" | jq -r '.[0].assets.links[]?.url // .[0].description // empty' 2>/dev/null | grep -oE 'https://[^\s"\)]+\.tar\.(gz|xz)' | head -n 1 || true)
 
             if [ -z "$URL" ]; then
               echo "⚠️ Release API blocked, attempting GitLab Package Registry..."
@@ -75,4 +76,3 @@ runs:
         
         git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git gcc64
         git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git gcc32
-        
