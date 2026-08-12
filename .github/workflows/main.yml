@@ -28,6 +28,7 @@ on:
         required: true
         type: choice
         options:
+          - lineage
           - lotus-kernel
           - camellia
           - lotus-test
