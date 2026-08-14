@@ -103,14 +103,23 @@ jobs:
       - name: Generate Changelog
         id: changelog
         run: |
-          echo "GENERATED_CHANGELOG<<EOF" >> $GITHUB_ENV
-          echo "🔹 **Vanilla Kernel Build (No Root / No SuSFS)**" >> $GITHUB_ENV
-          echo "🔹 **Kernel Version:** 4.14.357" >> $GITHUB_ENV
-          echo "🔹 **Toolchain:** Proton-Clang" >> $GITHUB_ENV
-          echo "🔹 **Latest Commits:**" >> $GITHUB_ENV
-          cd kernel-source && git log -5 --pretty=format:"- %s (%an)" >> ../changelog.txt
-          cat ../changelog.txt >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          cd kernel-source
+          # Ambil log commit dan simpan ke file
+          git log -5 --pretty=format:"- %s (%an)" > ../changelog.txt
+          # Tambahkan enter/baris baru secara paksa di akhir file
+          echo "" >> ../changelog.txt 
+          
+          cd ..
+          # Tulis semua output ke dalam $GITHUB_ENV sekaligus
+          {
+            echo "GENERATED_CHANGELOG<<EOF"
+            echo "🔹 **Vanilla Kernel Build (No Root / No SuSFS)**"
+            echo "🔹 **Kernel Version:** 4.14.357"
+            echo "🔹 **Toolchain:** Proton-Clang"
+            echo "🔹 **Latest Commits:**"
+            cat changelog.txt
+            echo "EOF"
+          } >> $GITHUB_ENV
 
       - name: Create GitHub Release & Upload Asset
         id: create_release
