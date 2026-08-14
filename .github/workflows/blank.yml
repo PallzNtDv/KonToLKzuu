@@ -6,7 +6,7 @@ on:
       defconfig:
         description: 'Target Defconfig File Name (contoh: camellia_defconfig)'
         required: true
-        default: 'camellia_defconfig'
+        default: 'camellian_gl_defconfig'
 
 jobs:
   build:
