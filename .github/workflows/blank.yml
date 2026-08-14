@@ -35,7 +35,7 @@ jobs:
       - name: Clone Kernel Source
         run: |
           # Ganti URL di bawah dengan link source kernel 4.14 Anda
-          git clone --depth=1 https://github.com/YourUsername/your_kernel_repo.git -b your-branch kernel-source
+          git clone --depth=1 https://github.com/cristidclxvi/android_kernel_xiaomi_camellia.git -b lineage-23.2 kernel-source
 
       - name: Download Proton-Clang Toolchain
         run: |
