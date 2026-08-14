@@ -10,7 +10,8 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # PERBAIKAN 1: Gunakan Ubuntu 20.04 untuk menghindari masalah glibc pada Proton-Clang
+    runs-on: ubuntu-20.04
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -59,10 +60,13 @@ jobs:
           
           export PATH="$GITHUB_WORKSPACE/toolchain/clang/bin:$GITHUB_WORKSPACE/toolchain/gcc64/bin:$GITHUB_WORKSPACE/toolchain/gcc32/bin:$PATH"
           
-          make O=out ARCH=arm64 ${{ inputs.defconfig }}
+          # PERBAIKAN 2: Tambahkan HOSTCC dan HOSTCXX untuk mencegah error linker
+          make O=out ARCH=arm64 ${{ inputs.defconfig }} HOSTCC=gcc HOSTCXX=g++
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
+            HOSTCC=gcc \
+            HOSTCXX=g++ \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-android- \
             CROSS_COMPILE_ARM32=arm-linux-androideabi-
@@ -97,12 +101,12 @@ jobs:
 
       - name: Create GitHub Release & Upload Asset
         id: create_release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: v4.14-vanilla-${{ github.run_number }}
-          name: "Vanilla Kernel 4.14.357 Build #${{ github.run_number }}"
+          name: "Vanilla Kernel 4.14 Build #${{ github.run_number }}"
           body: ${{ env.GENERATED_CHANGELOG }}
           files: Vanilla-Kernel-4.14-Camellia.zip
 
@@ -117,8 +121,6 @@ jobs:
             ✅ **BUILD KERNEL BERHASIL!**
             
             ${{ env.GENERATED_CHANGELOG }}
-            
-            🔗 [Download from GitHub Release](${{ steps.create_release.outputs.url }})
 
       - name: Send Telegram Build Failed
         if: failure()
