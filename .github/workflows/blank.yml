@@ -10,8 +10,8 @@ on:
 
 jobs:
   build:
-    # PERBAIKAN 1: Gunakan Ubuntu 20.04 untuk menghindari masalah glibc pada Proton-Clang
-    runs-on: ubuntu-20.04
+    # Menggunakan Ubuntu 22.04 yang stabil dan masih disupport penuh GitHub
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -35,7 +35,6 @@ jobs:
 
       - name: Clone Kernel Source
         run: |
-          # Ganti URL di bawah dengan link source kernel 4.14 Anda
           git clone --depth=1 https://github.com/cristidclxvi/android_kernel_xiaomi_camellia.git -b lineage-23.2 kernel-source
 
       - name: Download Proton-Clang Toolchain
@@ -58,18 +57,22 @@ jobs:
           export KBUILD_BUILD_USER="VanillaBuilder"
           export KBUILD_BUILD_HOST="GitHubActions"
           
-          export PATH="$GITHUB_WORKSPACE/toolchain/clang/bin:$GITHUB_WORKSPACE/toolchain/gcc64/bin:$GITHUB_WORKSPACE/toolchain/gcc32/bin:$PATH"
+          # PERBAIKAN: Kita definisikan PATH langsung tanpa "export PATH"
+          # Ini mencegah linker (ld) Ubuntu tertimpa oleh linker jadul milik Proton-Clang
+          CLANG_BIN="$GITHUB_WORKSPACE/toolchain/clang/bin/clang"
+          GCC64_BIN="$GITHUB_WORKSPACE/toolchain/gcc64/bin/aarch64-linux-android-"
+          GCC32_BIN="$GITHUB_WORKSPACE/toolchain/gcc32/bin/arm-linux-androideabi-"
           
-          # PERBAIKAN 2: Tambahkan HOSTCC dan HOSTCXX untuk mencegah error linker
-          make O=out ARCH=arm64 ${{ inputs.defconfig }} HOSTCC=gcc HOSTCXX=g++
+          # Build defconfig
+          make O=out ARCH=arm64 ${{ inputs.defconfig }}
+          
+          # Mulai Kompilasi
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
-            CC=clang \
-            HOSTCC=gcc \
-            HOSTCXX=g++ \
+            CC="$CLANG_BIN" \
             CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-android- \
-            CROSS_COMPILE_ARM32=arm-linux-androideabi-
+            CROSS_COMPILE="$GCC64_BIN" \
+            CROSS_COMPILE_ARM32="$GCC32_BIN"
 
       - name: Package Kernel (AnyKernel3)
         run: |
