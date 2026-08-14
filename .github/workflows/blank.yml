@@ -54,7 +54,7 @@ jobs:
             🔹 Tipe: ${{ env.BUILD_TITLE }}
             🔹 Defconfig: ${{ inputs.defconfig }}
             🔹 Run Number: ${{ github.run_number }}
-            Mohon tunggu, proses kompilasi sedang berjalan...
+            Mohon tunggu...
 
       - name: Setup Environment & Dependencies
         run: |
@@ -65,24 +65,18 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/cristidclxvi/android_kernel_xiaomi_camellia.git -b lineage-23.2 kernel-source
 
-      - name: Setup ReSuKISU & SUSFS (Jika Dipilih)
+      - name: Setup ReSuKISU & SUSFS
         if: inputs.build_type == 'ReSuKISU'
         run: |
           cd kernel-source
           
-          echo "📥 Memasang ReSuKISU..."
-          # 1. Clone ReSuKISU ke root folder kernel-source
           git clone --depth=1 https://github.com/ReSukiSU/ReSukiSU.git KernelSU
-          
-          # 2. Buat symlink (shortcut) agar compiler bisa menemukan Makefile di dalam folder 'kernel'
           ln -sf ../KernelSU/kernel drivers/KernelSU
           
-          # 3. Daftarkan KernelSU ke Makefile Utama
           if ! grep -q "KernelSU" drivers/Makefile; then
             echo "obj-y += KernelSU/" >> drivers/Makefile
           fi
           
-          # 4. Inject KPROBES & KSU config ke defconfig
           cat <<EOF >> arch/arm64/configs/${{ inputs.defconfig }}
           CONFIG_KSU=y
           CONFIG_KPROBES=y
@@ -90,27 +84,19 @@ jobs:
           CONFIG_KPROBE_EVENTS=y
           EOF
           
-          # 5. Proses SUSFS jika diaktifkan
           if [ "${{ inputs.include_susfs }}" == "true" ]; then
-            echo "📥 Memasang SUSFS 4 KSU..."
             git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git ../susfs4ksu
-            
-            # Copy source code SUSFS ke kernel
             cp ../susfs4ksu/kernel_patches/fs/susfs.c fs/
             cp ../susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/
             cp ../susfs4ksu/kernel_patches/include/linux/susfs_def.h include/linux/ 2>/dev/null || true
             cp ../susfs4ksu/kernel_patches/fs/sus_su.c fs/ 2>/dev/null || true
             
-            # Patch Kernel 4.14
             patch -p1 < ../susfs4ksu/kernel_patches/50_recipe_for_4.14.patch || true
             
-            # Patch modul KSU agar mendukung SUSFS
             cd KernelSU
-            # Eksekusi patch dari dalam root direktori KernelSU
             patch -p1 < ../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
             cd ..
             
-            # Inject SUSFS config ke defconfig
             cat <<EOF >> arch/arm64/configs/${{ inputs.defconfig }}
           CONFIG_KSU_SUSFS=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
@@ -131,10 +117,9 @@ jobs:
         run: |
           mkdir -p toolchain/clang
           cd toolchain/clang
-          echo "Downloading Proton-Clang..."
           git clone --depth=1 https://github.com/kdrag0n/proton-clang.git .
 
-      - name: Setup GCC Toolchain (Fallback 32-bit/64-bit)
+      - name: Setup GCC Toolchain
         run: |
           cd toolchain
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git gcc64
@@ -146,9 +131,7 @@ jobs:
           
           export KBUILD_BUILD_USER="root"
           export KBUILD_BUILD_HOST="root"
-          
           export PATH="$GITHUB_WORKSPACE/toolchain/clang/bin:$GITHUB_WORKSPACE/toolchain/gcc64/bin:$GITHUB_WORKSPACE/toolchain/gcc32/bin:$PATH"
-          
           export HOSTCC=/usr/bin/gcc
           export HOSTCXX=/usr/bin/g++
           export HOSTLD=/usr/bin/ld
@@ -171,24 +154,34 @@ jobs:
 
       - name: Package Kernel (AnyKernel3)
         run: |
-          # 1. Gunakan AnyKernel3 Original dari osm0sis
           git clone https://github.com/osm0sis/AnyKernel3 -b master anykernel
           rm -rf anykernel/.git anykernel/README.md
           
-          # 2. Ubah String Nama Kernel
-          sed -i 's/kernel.string=.*/kernel.string=Custom Kernel 4.14 by GitHub Actions/g' anykernel/anykernel.sh
+          cat << 'EOF' > anykernel/anykernel.sh
+          properties() { '
+          kernel.string=Custom Kernel 4.14 by GitHub Actions
+          do.devicecheck=0
+          do.modules=0
+          do.systemless=1
+          do.cleanup=1
+          do.cleanuponabort=0
+          '; }
           
-          # 3. Matikan Device Check (Agar TWRP tidak rewel soal nama device)
-          sed -i 's/do.devicecheck=1/do.devicecheck=0/g' anykernel/anykernel.sh
+          boot_attributes() {
+          set_perm_recursive 0 0 755 644 $RAMDISK/*;
+          set_perm_recursive 0 0 750 750 $RAMDISK/init* $RAMDISK/sbin;
+          }
           
-          # 4. PERBAIKAN: Ganti path partisi boot secara spesifik!
-          # Menimpa path bawaan 'omap' langsung ke partisi standar '/dev/block/by-name/boot'
-          sed -i 's|block=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;|block=/dev/block/by-name/boot;|g' anykernel/anykernel.sh
+          BLOCK=/dev/block/by-name/boot;
+          IS_SLOT_DEVICE=auto;
+          RAMDISK_COMPRESSION=auto;
+          PATCH_VBMETA_FLAG=auto;
           
-          # 5. Aktifkan fitur Slot A/B otomatis (Karena TWRP Anda memakai boot_a)
-          sed -i 's/is_slot_device=0/is_slot_device=auto/g' anykernel/anykernel.sh
+          . tools/ak3-core.sh;
+          dump_boot;
+          write_boot;
+          EOF
           
-          # 6. Pindahkan hasil kompilasi Kernel ke AnyKernel3
           if [ -f "kernel-source/out/arch/arm64/boot/Image.gz-dtb" ]; then
             cp kernel-source/out/arch/arm64/boot/Image.gz-dtb anykernel/
           elif [ -f "kernel-source/out/arch/arm64/boot/Image.gz" ]; then
@@ -197,7 +190,6 @@ jobs:
             cp kernel-source/out/arch/arm64/boot/Image anykernel/
           fi
           
-          # 7. Jadikan file ZIP
           cd anykernel
           zip -r9 ../${{ env.ZIP_NAME }} *
 
@@ -219,7 +211,7 @@ jobs:
             echo "EOF"
           } >> $GITHUB_ENV
 
-      - name: Create GitHub Release & Upload Asset
+      - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
         env:
@@ -251,4 +243,4 @@ jobs:
           message: |
             ❌ **BUILD KERNEL GAGAL!**
             Tipe Build: ${{ env.BUILD_TITLE }}
-            Terjadi kesalahan saat proses kompilasi. Silakan cek log GitHub Actions untuk detailnya.
+            Silakan cek log GitHub Actions.
