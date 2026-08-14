@@ -57,19 +57,24 @@ jobs:
           export KBUILD_BUILD_USER="VanillaBuilder"
           export KBUILD_BUILD_HOST="GitHubActions"
           
-          # PERBAIKAN: Kita definisikan PATH langsung tanpa "export PATH"
-          # Ini mencegah linker (ld) Ubuntu tertimpa oleh linker jadul milik Proton-Clang
-          CLANG_BIN="$GITHUB_WORKSPACE/toolchain/clang/bin/clang"
+          # Definisikan folder bin Clang
+          CLANG_DIR="$GITHUB_WORKSPACE/toolchain/clang/bin"
           GCC64_BIN="$GITHUB_WORKSPACE/toolchain/gcc64/bin/aarch64-linux-android-"
           GCC32_BIN="$GITHUB_WORKSPACE/toolchain/gcc32/bin/arm-linux-androideabi-"
           
           # Build defconfig
           make O=out ARCH=arm64 ${{ inputs.defconfig }}
           
-          # Mulai Kompilasi
+          # Mulai Kompilasi dengan tool LLVM yang lengkap
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
-            CC="$CLANG_BIN" \
+            CC="$CLANG_DIR/clang" \
+            LD="$CLANG_DIR/ld.lld" \
+            AR="$CLANG_DIR/llvm-ar" \
+            NM="$CLANG_DIR/llvm-nm" \
+            OBJCOPY="$CLANG_DIR/llvm-objcopy" \
+            OBJDUMP="$CLANG_DIR/llvm-objdump" \
+            STRIP="$CLANG_DIR/llvm-strip" \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE="$GCC64_BIN" \
             CROSS_COMPILE_ARM32="$GCC32_BIN"
