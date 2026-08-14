@@ -1,4 +1,5 @@
 name: Build Vanilla Kernel 4.14
+
 on:
   workflow_dispatch:
     inputs:
@@ -6,10 +7,6 @@ on:
         description: 'Target Defconfig File Name (contoh: camellia_defconfig)'
         required: true
         default: 'camellia_defconfig'
-      chat_id:
-        description: 'Telegram Chat ID untuk Notifikasi Bot'
-        required: true
-        default: 'YOUR_TELEGRAM_CHAT_ID'
 
 jobs:
   build:
@@ -17,6 +14,18 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Send Telegram Build Started
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            🚀 **BUILD KERNEL DIMULAI!**
+            🔹 Repository: ${{ github.repository }}
+            🔹 Run Number: ${{ github.run_number }}
+            🔹 Defconfig: ${{ inputs.defconfig }}
+            Mohon tunggu, proses kompilasi sedang berjalan...
 
       - name: Setup Environment & Dependencies
         run: |
@@ -26,7 +35,7 @@ jobs:
       - name: Clone Kernel Source
         run: |
           # Ganti URL di bawah dengan link source kernel 4.14 Anda
-          git clone --depth=1 https://github.com/cristidclxvi/android_kernel_xiaomi_camellia.git -b lineage-23.2 kernel-source
+          git clone --depth=1 https://github.com/YourUsername/your_kernel_repo.git -b your-branch kernel-source
 
       - name: Download Proton-Clang Toolchain
         run: |
@@ -45,14 +54,11 @@ jobs:
         run: |
           cd kernel-source
           
-          # Bersihkan variabel pembangun agar rapi
-          export KBUILD_BUILD_USER="Builder"
+          export KBUILD_BUILD_USER="VanillaBuilder"
           export KBUILD_BUILD_HOST="GitHubActions"
           
-          # Set jalur toolchain
           export PATH="$GITHUB_WORKSPACE/toolchain/clang/bin:$GITHUB_WORKSPACE/toolchain/gcc64/bin:$GITHUB_WORKSPACE/toolchain/gcc32/bin:$PATH"
           
-          # Kompilasi
           make O=out ARCH=arm64 ${{ inputs.defconfig }}
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
@@ -66,7 +72,6 @@ jobs:
           git clone https://github.com/Kernel-SU/AnyKernel3 -b master anykernel
           rm -rf anykernel/.git anykernel/README.md
           
-          # Masukkan file Image.gz-dtb hasil build ke AnyKernel3
           if [ -f "kernel-source/out/arch/arm64/boot/Image.gz-dtb" ]; then
             cp kernel-source/out/arch/arm64/boot/Image.gz-dtb anykernel/
           elif [ -f "kernel-source/out/arch/arm64/boot/Image.gz" ]; then
@@ -101,16 +106,26 @@ jobs:
           body: ${{ env.GENERATED_CHANGELOG }}
           files: Vanilla-Kernel-4.14-Camellia.zip
 
-      - name: Send Telegram Notification & Changelog
+      - name: Send Telegram Build Success
+        if: success()
         uses: appleboy/telegram-action@master
         with:
-          to: ${{ inputs.chat_id }}
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           document: "Vanilla-Kernel-4.14-Camellia.zip"
           caption: |
-            ✅ **Vanilla Kernel Build Success!**
+            ✅ **BUILD KERNEL BERHASIL!**
             
             ${{ env.GENERATED_CHANGELOG }}
             
             🔗 [Download from GitHub Release](${{ steps.create_release.outputs.url }})
-            
+
+      - name: Send Telegram Build Failed
+        if: failure()
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            ❌ **BUILD KERNEL GAGAL!**
+            Terjadi kesalahan saat proses kompilasi. Silakan cek log GitHub Actions untuk detailnya.
