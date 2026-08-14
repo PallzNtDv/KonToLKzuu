@@ -1,20 +1,48 @@
-name: Build Vanilla Kernel 4.14
+name: Build Kernel 4.14 (Vanilla / ReSuKISU + SUSFS)
 
 on:
   workflow_dispatch:
     inputs:
       defconfig:
-        description: 'Target Defconfig File Name (contoh: camellia_defconfig)'
+        description: 'Target Defconfig File Name'
         required: true
         default: 'camellian_gl_defconfig'
+      build_type:
+        description: 'Pilih Tipe Build Kernel'
+        required: true
+        type: choice
+        default: 'ReSuKISU'
+        options:
+          - Vanilla
+          - ReSuKISU
+      include_susfs:
+        description: 'Gunakan SUSFS (Hanya Berlaku jika memilih ReSuKISU)'
+        required: true
+        type: boolean
+        default: true
 
 jobs:
   build:
-    # Menggunakan Ubuntu 22.04 yang stabil dan masih disupport penuh GitHub
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Determine Build Name & ZIP
+        id: set_name
+        run: |
+          if [ "${{ inputs.build_type }}" == "ReSuKISU" ]; then
+            if [ "${{ inputs.include_susfs }}" == "true" ]; then
+              echo "ZIP_NAME=ReSuKISU-SUSFS-Kernel-4.14-Camellia.zip" >> $GITHUB_ENV
+              echo "BUILD_TITLE=ReSuKISU + SUSFS" >> $GITHUB_ENV
+            else
+              echo "ZIP_NAME=ReSuKISU-Kernel-4.14-Camellia.zip" >> $GITHUB_ENV
+              echo "BUILD_TITLE=ReSuKISU" >> $GITHUB_ENV
+            fi
+          else
+            echo "ZIP_NAME=Vanilla-Kernel-4.14-Camellia.zip" >> $GITHUB_ENV
+            echo "BUILD_TITLE=Vanilla Kernel" >> $GITHUB_ENV
+          fi
 
       - name: Send Telegram Build Started
         uses: appleboy/telegram-action@master
@@ -23,9 +51,9 @@ jobs:
           token: ${{ secrets.TELEGRAM_TOKEN }}
           message: |
             🚀 **BUILD KERNEL DIMULAI!**
-            🔹 Repository: ${{ github.repository }}
-            🔹 Run Number: ${{ github.run_number }}
+            🔹 Tipe: ${{ env.BUILD_TITLE }}
             🔹 Defconfig: ${{ inputs.defconfig }}
+            🔹 Run Number: ${{ github.run_number }}
             Mohon tunggu, proses kompilasi sedang berjalan...
 
       - name: Setup Environment & Dependencies
@@ -36,6 +64,64 @@ jobs:
       - name: Clone Kernel Source
         run: |
           git clone --depth=1 https://github.com/cristidclxvi/android_kernel_xiaomi_camellia.git -b lineage-23.2 kernel-source
+
+      - name: Setup ReSuKISU & SUSFS (Jika Dipilih)
+        if: inputs.build_type == 'ReSuKISU'
+        run: |
+          cd kernel-source
+          
+          echo "📥 Memasang ReSuKISU..."
+          # Clone ReSuKISU ke dalam tree kernel
+          git clone --depth=1 https://github.com/rsuntk/ReSuKISU.git KernelSU
+          
+          # Daftarkan KernelSU ke Makefile Utama
+          if ! grep -q "KernelSU" drivers/Makefile; then
+            echo "obj-y += KernelSU/" >> drivers/Makefile
+          fi
+          
+          # Inject KPROBES & KSU config ke defconfig
+          cat <<EOF >> arch/arm64/configs/${{ inputs.defconfig }}
+          CONFIG_KSU=y
+          CONFIG_KPROBES=y
+          CONFIG_HAVE_KPROBES=y
+          CONFIG_KPROBE_EVENTS=y
+          EOF
+          
+          # Proses SUSFS jika diaktifkan
+          if [ "${{ inputs.include_susfs }}" == "true" ]; then
+            echo "📥 Memasang SUSFS 4 KSU..."
+            git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git ../susfs4ksu
+            
+            # Copy source code SUSFS ke kernel
+            cp ../susfs4ksu/kernel_patches/fs/susfs.c fs/
+            cp ../susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/
+            cp ../susfs4ksu/kernel_patches/include/linux/susfs_def.h include/linux/ 2>/dev/null || true
+            cp ../susfs4ksu/kernel_patches/fs/sus_su.c fs/ 2>/dev/null || true
+            
+            # Patch Kernel 4.14
+            patch -p1 < ../susfs4ksu/kernel_patches/50_recipe_for_4.14.patch || true
+            
+            # Patch modul KSU agar mendukung SUSFS
+            cd KernelSU
+            patch -p1 < ../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
+            cd ..
+            
+            # Inject SUSFS config ke defconfig
+            cat <<EOF >> arch/arm64/configs/${{ inputs.defconfig }}
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y
+          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_SUSFS_SUS_SU=y
+          EOF
+          fi
 
       - name: Download Proton-Clang Toolchain
         run: |
@@ -50,26 +136,22 @@ jobs:
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git gcc64
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git gcc32
 
-      - name: Compile Vanilla Kernel
+      - name: Compile Kernel
         run: |
           cd kernel-source
           
           export KBUILD_BUILD_USER="root"
           export KBUILD_BUILD_HOST="root"
           
-          # 1. Masukkan folder Clang & GCC ke dalam PATH agar skrip kotor MediaTek bisa menemukannya
           export PATH="$GITHUB_WORKSPACE/toolchain/clang/bin:$GITHUB_WORKSPACE/toolchain/gcc64/bin:$GITHUB_WORKSPACE/toolchain/gcc32/bin:$PATH"
           
-          # 2. Kunci Host Tools ke sistem Ubuntu secara absolut untuk mencegah error glibc (.relr.dyn)
           export HOSTCC=/usr/bin/gcc
           export HOSTCXX=/usr/bin/g++
           export HOSTLD=/usr/bin/ld
           export HOSTAR=/usr/bin/ar
           
-          # Build defconfig
           make O=out ARCH=arm64 ${{ inputs.defconfig }}
           
-          # Mulai Kompilasi
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
@@ -82,7 +164,6 @@ jobs:
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-android- \
             CROSS_COMPILE_ARM32=arm-linux-androideabi-
-
 
       - name: Package Kernel (AnyKernel3)
         run: |
@@ -98,22 +179,19 @@ jobs:
           fi
           
           cd anykernel
-          zip -r9 ../Vanilla-Kernel-4.14-Camellia.zip *
+          zip -r9 ../${{ env.ZIP_NAME }} *
 
       - name: Generate Changelog
         id: changelog
         run: |
           cd kernel-source
-          # Ambil log commit dan simpan ke file
           git log -5 --pretty=format:"- %s (%an)" > ../changelog.txt
-          # Tambahkan enter/baris baru secara paksa di akhir file
           echo "" >> ../changelog.txt 
           
           cd ..
-          # Tulis semua output ke dalam $GITHUB_ENV sekaligus
           {
             echo "GENERATED_CHANGELOG<<EOF"
-            echo "🔹 **Vanilla Kernel Build (No Root / No SuSFS)**"
+            echo "🔹 **Build Type:** ${{ env.BUILD_TITLE }}"
             echo "🔹 **Kernel Version:** 4.14.357"
             echo "🔹 **Toolchain:** Proton-Clang"
             echo "🔹 **Latest Commits:**"
@@ -127,10 +205,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v4.14-vanilla-${{ github.run_number }}
-          name: "Vanilla Kernel 4.14 Build #${{ github.run_number }}"
+          tag_name: v4.14-${{ inputs.build_type }}-${{ github.run_number }}
+          name: "${{ env.BUILD_TITLE }} Kernel 4.14 Build #${{ github.run_number }}"
           body: ${{ env.GENERATED_CHANGELOG }}
-          files: Vanilla-Kernel-4.14-Camellia.zip
+          files: ${{ env.ZIP_NAME }}
 
       - name: Send Telegram Build Success
         if: success()
@@ -138,7 +216,7 @@ jobs:
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
-          document: "Vanilla-Kernel-4.14-Camellia.zip"
+          document: "${{ env.ZIP_NAME }}"
           caption: |
             ✅ **BUILD KERNEL BERHASIL!**
             
@@ -152,4 +230,5 @@ jobs:
           token: ${{ secrets.TELEGRAM_TOKEN }}
           message: |
             ❌ **BUILD KERNEL GAGAL!**
+            Tipe Build: ${{ env.BUILD_TITLE }}
             Terjadi kesalahan saat proses kompilasi. Silakan cek log GitHub Actions untuk detailnya.
