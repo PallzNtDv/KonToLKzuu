@@ -171,24 +171,24 @@ jobs:
 
       - name: Package Kernel (AnyKernel3)
         run: |
-          # 1. Gunakan AnyKernel3 Original dari osm0sis (Bukan versi KernelSU)
+          # 1. Gunakan AnyKernel3 Original dari osm0sis
           git clone https://github.com/osm0sis/AnyKernel3 -b master anykernel
           rm -rf anykernel/.git anykernel/README.md
           
-          # 2. Konfigurasi anykernel.sh khusus untuk perangkat Camellia / MT6833
-          # Mengubah nama kernel yang tampil di TWRP
+          # 2. Ubah String Nama Kernel
           sed -i 's/kernel.string=.*/kernel.string=Custom Kernel 4.14 by GitHub Actions/g' anykernel/anykernel.sh
           
-          # Mematikan validasi nama device (agar tidak error salah nama device saat flash)
+          # 3. Matikan Device Check (Agar TWRP tidak rewel soal nama device)
           sed -i 's/do.devicecheck=1/do.devicecheck=0/g' anykernel/anykernel.sh
           
-          # Mengarahkan flashing langsung ke partisi boot Camellia
-          sed -i 's|block=.*|block=/dev/block/by-name/boot;|g' anykernel/anykernel.sh
+          # 4. PERBAIKAN: Ganti path partisi boot secara spesifik!
+          # Menimpa path bawaan 'omap' langsung ke partisi standar '/dev/block/by-name/boot'
+          sed -i 's|block=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;|block=/dev/block/by-name/boot;|g' anykernel/anykernel.sh
           
-          # Mengaktifkan dukungan partisi A/B (karena di screenshot terlihat menggunakan boot_a)
+          # 5. Aktifkan fitur Slot A/B otomatis (Karena TWRP Anda memakai boot_a)
           sed -i 's/is_slot_device=0/is_slot_device=auto/g' anykernel/anykernel.sh
           
-          # 3. Pindahkan hasil kompilasi Kernel ke dalam AnyKernel3
+          # 6. Pindahkan hasil kompilasi Kernel ke AnyKernel3
           if [ -f "kernel-source/out/arch/arm64/boot/Image.gz-dtb" ]; then
             cp kernel-source/out/arch/arm64/boot/Image.gz-dtb anykernel/
           elif [ -f "kernel-source/out/arch/arm64/boot/Image.gz" ]; then
@@ -197,7 +197,7 @@ jobs:
             cp kernel-source/out/arch/arm64/boot/Image anykernel/
           fi
           
-          # 4. Jadikan file ZIP
+          # 7. Jadikan file ZIP
           cd anykernel
           zip -r9 ../${{ env.ZIP_NAME }} *
 
