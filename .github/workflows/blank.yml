@@ -71,8 +71,8 @@ jobs:
           cd kernel-source
           
           echo "📥 Memasang ReSuKISU..."
-          # PERBAIKAN: Menggunakan URL resmi ReSukiSU
-          git clone --depth=1 https://github.com/ReSukiSU/ReSukiSU.git KernelSU
+          # PERBAIKAN 1: Clone langsung ke dalam folder drivers/KernelSU
+          git clone --depth=1 https://github.com/ReSukiSU/ReSukiSU.git drivers/KernelSU
           
           # Daftarkan KernelSU ke Makefile Utama
           if ! grep -q "KernelSU" drivers/Makefile; then
@@ -102,9 +102,10 @@ jobs:
             patch -p1 < ../susfs4ksu/kernel_patches/50_recipe_for_4.14.patch || true
             
             # Patch modul KSU agar mendukung SUSFS
-            cd KernelSU
-            patch -p1 < ../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
-            cd ..
+            cd drivers/KernelSU
+            # PERBAIKAN 2: Sesuaikan mundur path (../../../) karena folder KernelSU sekarang ada di dalam drivers/
+            patch -p1 < ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
+            cd ../..
             
             # Inject SUSFS config ke defconfig
             cat <<EOF >> arch/arm64/configs/${{ inputs.defconfig }}
