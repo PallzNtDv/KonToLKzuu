@@ -71,8 +71,8 @@ jobs:
           cd kernel-source
           
           echo "📥 Memasang ReSuKISU..."
-          # Clone ReSuKISU ke dalam tree kernel
-          git clone --depth=1 https://github.com/rsuntk/ReSuKISU.git KernelSU
+          # PERBAIKAN: Menggunakan URL resmi ReSukiSU
+          git clone --depth=1 https://github.com/ReSukiSU/ReSukiSU.git KernelSU
           
           # Daftarkan KernelSU ke Makefile Utama
           if ! grep -q "KernelSU" drivers/Makefile; then
