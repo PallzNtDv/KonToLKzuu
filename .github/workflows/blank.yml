@@ -19,7 +19,7 @@ jobs:
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
           message: |
             🚀 **BUILD KERNEL DIMULAI!**
             🔹 Repository: ${{ github.repository }}
@@ -111,7 +111,7 @@ jobs:
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
           document: "Vanilla-Kernel-4.14-Camellia.zip"
           caption: |
             ✅ **BUILD KERNEL BERHASIL!**
@@ -125,7 +125,7 @@ jobs:
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
           message: |
             ❌ **BUILD KERNEL GAGAL!**
             Terjadi kesalahan saat proses kompilasi. Silakan cek log GitHub Actions untuk detailnya.
