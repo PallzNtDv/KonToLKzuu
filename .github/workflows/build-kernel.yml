@@ -64,7 +64,7 @@ jobs:
 
     env:
       ARCH: "arm64"
-      KERNEL_DEFCONFIG: "camellia_defconfig"
+      KERNEL_DEFCONFIG: "camellia_v7_full_defconfig"
 
     steps:
       - name: Maximize Build Space
