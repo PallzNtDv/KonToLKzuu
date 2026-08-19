@@ -32,7 +32,7 @@ on:
           - lotus-kernel
           - camellia
           - lotus-test
-          - vortex-v1
+          - camellia-fts-fix
           - vortex-test
       include_susfs:
         description: 'Include SUSFS (Kernel Anti-Detection)'
