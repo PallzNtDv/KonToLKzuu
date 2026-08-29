@@ -118,7 +118,6 @@ jobs:
           mkdir -p toolchain/clang
           cd toolchain/clang
           wget https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/30072026/neutron-clang-30072026.tar.zst
-          apt install zstd
           tar -xf neutron-clang-30072026.tar.zst
           rm -rf neutron-clang-30072026.tar.zst
 
