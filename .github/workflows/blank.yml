@@ -63,7 +63,7 @@ jobs:
 
       - name: Clone Kernel Source
         run: |
-          git clone --depth=1 https://github.com/PallzNtDv/kernel_xiaomi_mt6833.git -b flyme-fts-fix kernel-source
+          git clone --depth=1 https://github.com/PallzNtDv/kernel_xiaomi_mt6833.git -b ksunext-susfs kernel-source
 
       - name: Setup ReSuKISU & SUSFS
         if: inputs.build_type == 'ReSuKISU'
@@ -113,11 +113,14 @@ jobs:
           EOF
           fi
 
-      - name: Download Proton-Clang Toolchain
+      - name: Download Neutron-Clang Toolchain
         run: |
           mkdir -p toolchain/clang
           cd toolchain/clang
-          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git .
+          wget https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/30072026/neutron-clang-30072026.tar.zst
+          apt install zstd
+          tar -xf neutron-clang-30072026.tar.zst
+          rm -rf neutron-clang-30072026.tar.zst
 
       - name: Setup GCC Toolchain
         run: |
@@ -205,7 +208,7 @@ jobs:
             echo "GENERATED_CHANGELOG<<EOF"
             echo "🔹 **Build Type:** ${{ env.BUILD_TITLE }}"
             echo "🔹 **Kernel Version:** 4.14.357"
-            echo "🔹 **Toolchain:** Proton-Clang"
+            echo "🔹 **Toolchain:** Neutron-Clang"
             echo "🔹 **Latest Commits:**"
             cat changelog.txt
             echo "EOF"
